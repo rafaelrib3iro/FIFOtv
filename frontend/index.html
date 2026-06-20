@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1280, height=720, initial-scale=1.0">
+    <title>FIFOtv</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preload" href="assets/fonts/Poppins/Poppins-200.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="assets/fonts/Poppins/Poppins-300.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="assets/fonts/Poppins/Poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="assets/fonts/Poppins/Poppins-500.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+<body oncontextmenu="return false;">
+    <script>
+    // Override navigator properties to appear as a Smart TV
+    // Note: this is a fallback layer — the Chrome extension (tv-override) handles all external pages
+    Object.defineProperty(navigator, 'userAgent', {
+        get: function() { return 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'; }
+    });
+    Object.defineProperty(navigator, 'platform', {
+        get: function() { return 'Linux armv7l'; }
+    });
+    Object.defineProperty(navigator, 'appVersion', {
+        get: function() { return '5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'; }
+    });
+    Object.defineProperty(navigator, 'webdriver', {
+        get: function() { return false; }
+    });
+    // Prevent default context menu at DOM level
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); }, true);
+    </script>
+    <div id="app">
+        <header id="header">
+            <div class="header-left">
+                <div class="pill pill-settings" id="btn-settings" tabindex="0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </div>
+                <div class="pill pill-wifi" tabindex="0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                        <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                        <circle cx="12" cy="20" r="0.8" fill="currentColor" stroke="none"/>
+                    </svg>
+                    <span class="dot dot-connected"></span>
+                </div>
+                <div class="pill pill-bluetooth" tabindex="0">
+                    <svg width="11" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
+                    </svg>
+                    <span class="dot dot-connected" id="bt-pill-dot"></span>
+                    <span class="bt-name" id="bt-pill-name"></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="clock" id="clock">23:45</div>
+                <div class="date" id="date">Quarta, 18 de junho</div>
+            </div>
+        </header>
+
+        <main id="content-wrapper" class="content-wrapper">
+            <div id="recents-section" class="recents-section">
+                <div class="section-label">Mais Usados</div>
+                <div id="recents-grid" class="recents-grid"></div>
+            </div>
+            <div id="grid" class="grid"></div>
+        </main>
+
+        <div id="screensaver" class="screensaver hidden">
+            <div class="screensaver-clock" id="screensaver-clock">23:45</div>
+            <div class="screensaver-date" id="screensaver-date">Quarta, 18 de junho</div>
+        </div>
+
+        <div id="context-menu" class="context-menu hidden"></div>
+        <div id="settings-popup" class="popup hidden"></div>
+        <div id="add-popup" class="popup hidden"></div>
+        <div id="monitor-popup" class="popup monitor-popup hidden">
+            <div class="monitor-grid">
+                <div class="monitor-card">
+                    <div class="monitor-card-header">
+                        <div class="monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+                        <div class="monitor-card-label">CPU</div>
+                    </div>
+                    <div class="monitor-card-value" id="monitor-cpu-val">—</div>
+                    <div class="monitor-bar"><div class="monitor-bar-fill" id="monitor-cpu-fill" style="width:0%"></div></div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-card-header">
+                        <div class="monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+                        <div class="monitor-card-label">RAM</div>
+                    </div>
+                    <div class="monitor-card-value" id="monitor-ram-val">—</div>
+                    <div class="monitor-bar"><div class="monitor-bar-fill" id="monitor-ram-fill" style="width:0%"></div></div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-card-header">
+                        <div class="monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                        <div class="monitor-card-label">Disco</div>
+                    </div>
+                    <div class="monitor-card-value" id="monitor-disk-val">—</div>
+                    <div class="monitor-bar"><div class="monitor-bar-fill" id="monitor-disk-fill" style="width:0%"></div></div>
+                </div>
+                <div class="monitor-card">
+                    <div class="monitor-card-header">
+                        <div class="monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
+                        <div class="monitor-card-label">Processos</div>
+                    </div>
+                    <div class="monitor-card-value" id="monitor-proc-val">—</div>
+                </div>
+            </div>
+        </div>
+        <div id="transition-overlay" class="transition-overlay hidden"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

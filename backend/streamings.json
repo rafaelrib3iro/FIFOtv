@@ -1,0 +1,46 @@
+{
+  "streamings": [
+    {
+      "id": 1,
+      "name": "Netflix",
+      "slug": "netflix",
+      "url": "https://netflix.com"
+    },
+    {
+      "id": 2,
+      "name": "YouTube",
+      "slug": "youtube",
+      "url": "https://youtube.com/tv"
+    },
+    {
+      "id": 3,
+      "name": "Prime Video",
+      "slug": "primevideo",
+      "url": "https://primevideo.com"
+    },
+    {
+      "id": 4,
+      "name": "Disney+",
+      "slug": "disneyplus",
+      "url": "https://disneyplus.com"
+    },
+    {
+      "id": 7,
+      "name": "Max",
+      "slug": "hbomax",
+      "url": "https://max.com"
+    },
+    {
+      "id": 1781891470474,
+      "name": "Apple TV",
+      "slug": "appletv",
+      "url": "https://tv.apple.com/br"
+    },
+    {
+      "id": 1781893996522,
+      "name": "Apple Music",
+      "slug": "applemusic",
+      "url": "https://music.apple.com/br/"
+    }
+  ]
+}

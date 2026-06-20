@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.whl
+.venv/
+venv/
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+nohup.out
+
+# Cache
+.cache/
+*.cache
+
+# Config local (senhas, MACs)
+backend/config.json
+
+# Temp
+/tmp/
+*.pid
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.iso
