@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld('fifotv', {
   openStreaming: (url, name, slug) => ipcRenderer.invoke('nav:open-streaming', url, name, slug),
   goHome: () => ipcRenderer.invoke('nav:go-home'),
 
+  // Acesso Remoto
+  remoteStatus: () => ipcRenderer.invoke('remote:status'),
+  remoteToggle: () => ipcRenderer.invoke('remote:toggle'),
+
   // Eventos do main process
   onVolumeChange: (cb) => ipcRenderer.on('volume:changed', (_, data) => cb(data)),
   onBtStatusChange: (cb) => ipcRenderer.on('bt:status-changed', (_, data) => cb(data)),

@@ -13,6 +13,8 @@ let splashView = null;
 let loadingTimer = null;
 let appCommandAttached = false;
 let overlayMenuVisible = false;
+let remoteProcess = null;
+let remoteRunning = false;
 const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
 const STREAMING_CONFIG = require('./views/streaming-customizations/config');
 const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
@@ -638,6 +640,57 @@ ipcMain.on('overlay:hide-menu', () => {
   streamingView.webContents.focus(); // focus AFTER z-order
 });
 
+// ─── REMOTE ACCESS (opencode serve) ────────────────────────
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+ipcMain.handle('remote:status', () => {
+  return {
+    running: remoteRunning,
+    ip: getLocalIP(),
+    port: 3000,
+    hostname: os.hostname(),
+  };
+});
+
+ipcMain.handle('remote:toggle', () => {
+  if (remoteRunning) {
+    // Stop opencode serve
+    if (remoteProcess) {
+      remoteProcess.kill('SIGTERM');
+      remoteProcess = null;
+    }
+    remoteRunning = false;
+    return { running: false };
+  } else {
+    // Start opencode serve
+    try {
+      remoteProcess = exec('opencode serve --port 3000', { timeout: 30000 });
+      remoteProcess.on('error', (err) => {
+        console.error('[Remote] Erro:', err.message);
+        remoteRunning = false;
+        remoteProcess = null;
+      });
+      remoteProcess.on('exit', () => {
+        remoteRunning = false;
+        remoteProcess = null;
+      });
+      remoteRunning = true;
+      return { running: true };
+    } catch (e) {
+      console.error('[Remote] Falha ao iniciar:', e.message);
+      return { running: false, error: e.message };
+    }
+  }
+});
+
 // ─── APP LIFECYCLE ─────────────────────────────────────────
 app.whenReady().then(async () => {
   // Castlabs: wait for Widevine CDM to be ready
@@ -646,10 +699,13 @@ app.whenReady().then(async () => {
     console.log('[FIFOtv] Widevine CDM ready:', components.status());
   }
 
+  const { width, height } = getViewBounds();
   win = new BrowserWindow({
-    kiosk: app.commandLine.hasSwitch('kiosk'),
+    x: 0,
+    y: 0,
+    width,
+    height,
     frame: false,
-    fullscreen: true,
     backgroundColor: '#000',
     webPreferences: {
       contextIsolation: true,
@@ -669,8 +725,6 @@ app.whenReady().then(async () => {
     if (perm === 'mediaKeySystem') cb(true);
     else cb(false);
   });
-
-  const { width, height } = getViewBounds();
 
   // Show splash screen first
   splashView = new WebContentsView({

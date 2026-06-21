@@ -1267,7 +1267,7 @@ function showVolumeToast() {
 
 async function loadRemoteStatus() {
     try {
-        const data = { running: false, ip: '', port: 3000, hostname: '' };
+        const data = await window.fifotv.remoteStatus();
         const statusEl = document.getElementById('remote-status');
         const ipEl = document.getElementById('remote-ip');
         const portEl = document.getElementById('remote-port');
@@ -1287,7 +1287,8 @@ async function loadRemoteStatus() {
 
 async function toggleRemoteAccess() {
     try {
-        loadRemoteStatus();
+        await window.fifotv.remoteToggle();
+        await loadRemoteStatus();
     } catch (e) {}
 }
 
