@@ -3,7 +3,7 @@
 ## Visão Geral
 
 ```
-Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 5.5 → Sessão 6 → Sessão 7 → Sessão 8
+Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 5.5 ✅ → Sessão 6 → Sessão 7 → Sessão 8
   setup         serviços      streaming    controles    TV custom      fixes       teste+push  hw fixes   deploy     iso+inst    merge+tag
 ```
 
@@ -387,7 +387,7 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 
 ---
 
-## Sessão 5.5 — Fix de Bugs no Hardware Real
+## Sessão 5.5 ✅ — Fix de Bugs no Hardware Real
 
 **Objetivo:** Testar o v2 no all-in-one (Positivo Union UD3630), identificar e corrigir bugs encontrados.
 

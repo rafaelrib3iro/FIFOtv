@@ -14,6 +14,7 @@
 | 8 | Bluetooth não conecta (br-connection-page-timeout) | ✅ Resolvido | — |
 | 9 | Mouse cursor some rapidamente (invisível ao usar) | ✅ Resolvido | — |
 | 10 | Foco não volta pro streaming após toast/menu | ✅ Resolvido | — |
+| 11 | Xorg encerra imediatamente no boot (.xinitrc sem processo background) | ✅ Resolvido | `3da6532` |
 
 ---
 
@@ -194,3 +195,15 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 5. `streamingView.webContents.focus()` chamado após cada remoção do overlay
 
 **Arquivos:** `electron/main.js`
+
+---
+
+## Bug 11 — Xorg encerra imediatamente no boot
+
+**Descrição:** Após reiniciar o all-in-one, o Xorg iniciava mas encerrava imediatamente. Usuário ficava em TTY (`tv@localhost:~$`). Erro: `xinit: connection to X server lost`.
+
+**Causa:** O `.xinitrc` terminava com `wait`, que esperava processos background. Quando removemos o `unclutter -idle 0 &` (Bug 9), não sobrou nenhum processo background. O `wait` retornava na hora, o `.xinitrc` terminava, e o Xorg encerrava.
+
+**Fix:** Substituir `wait` por `exec sleep infinity` — mantém o Xorg rodando eternamente sem processos extras.
+
+**Arquivos:** `system/.xinitrc`, `scripts/update.sh`, `update.sh`
