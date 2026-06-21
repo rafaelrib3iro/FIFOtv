@@ -250,6 +250,7 @@ ipcMain.handle('wifi:connect', async (_, ssid, password) => {
 // ─── BLUETOOTH (dbus-next) ─────────────────────────────────
 const dbusNext = require('dbus-next');
 const { Interface: DbusInterface, DBusError } = dbusNext.interface;
+const DbusVariant = dbusNext.Variant;
 
 let btAdapter = null;
 let btAgentRegistered = false;
@@ -390,8 +391,8 @@ ipcMain.handle('bt:scan', async () => {
 
     try { await adapterIface.StopDiscovery(); } catch {}
 
-    await props.Set('org.bluez.Adapter1', 'Pairable', true);
-    await props.Set('org.bluez.Adapter1', 'Discoverable', true);
+    await props.Set('org.bluez.Adapter1', 'Pairable', new DbusVariant('b', true));
+    await props.Set('org.bluez.Adapter1', 'Discoverable', new DbusVariant('b', true));
 
     await adapterIface.StartDiscovery();
     await btSleep(3000);
@@ -444,7 +445,7 @@ ipcMain.handle('bt:connect', async (_, mac) => {
       if (!pairedOk) return { ok: false, error: 'Pairing timeout' };
     }
 
-    await props.Set('org.bluez.Device1', 'Trusted', true);
+    await props.Set('org.bluez.Device1', 'Trusted', new DbusVariant('b', true));
 
     try { await dev.Connect(); } catch (e) {
       if (!e.type || !e.type.includes('AlreadyConnected')) {
