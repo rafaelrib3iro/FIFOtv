@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIFOtv — Air Mouse Key Tester</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a1a; color: #e0e0e0; font-family: 'JetBrains Mono', monospace; padding: 24px; }
+  h1 { font-size: 18px; color: #4ade80; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #666; margin-bottom: 24px; }
+  #log { display: flex; flex-direction: column; gap: 6px; }
+  .entry {
+    background: #1a1a2a;
+    border-left: 3px solid #4ade80;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    line-height: 1.6;
+    animation: fadeIn 0.15s ease;
+  }
+  .entry.mapped { border-left-color: #f59e0b; }
+  .entry.mapped::after {
+    content: 'MAPPED';
+    background: #f59e0b;
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+  .label { color: #888; }
+  .val { color: #4ade80; font-weight: bold; }
+  .val.warn { color: #f59e0b; }
+  .val.danger { color: #ef4444; }
+  .controls { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; }
+  button {
+    background: #1a2e1a; color: #4ade80; border: 1px solid #4ade80;
+    padding: 6px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px;
+  }
+  button:hover { background: #2a4a2a; }
+  #counter { color: #666; font-size: 12px; }
+  #mapping-help { color: #888; font-size: 11px; margin-top: 20px; padding: 12px; background: #111; border-radius: 6px; line-height: 1.8; }
+  #mapping-help b { color: #f59e0b; }
+</style>
+</head>
+<body>
+<h1>Air Mouse Key Tester</h1>
+<div class="subtitle">Pressione cada botão do air mouse. Cole o resultado no chat.</div>
+
+<div class="controls">
+  <button onclick="clearLog()">Limpar</button>
+  <button onclick="exportLog()">Copiar tudo</button>
+  <span id="counter">0 eventos</span>
+</div>
+
+<div id="log"></div>
+
+<div id="mapping-help">
+  <b>Como usar:</b> Pressione cada botão do air mouse (todos!), incluindo:<br>
+  ← Voltar &nbsp; | &nbsp; ↑↓←→ D-pad &nbsp; | &nbsp; OK/Enter &nbsp; | &nbsp; Home &nbsp; | &nbsp; Menu/ContextMenu<br>
+  Vol+ &nbsp; | &nbsp; Vol- &nbsp; | &nbsp; Mudo &nbsp; | &nbsp; Play/Pause &nbsp; | &nbsp; F1 &nbsp; | &nbsp; F5 &nbsp; | &nbsp; F9 &nbsp; | &nbsp; F12<br>
+  <br>
+  Depois clique em <b>Copiar tudo</b> e cole no chat.
+</div>
+
+<script>
+const MAPPED_KEYS = [
+  'BrowserBack', 'GoBack', 'Escape',
+  'VolumeDown', 'VolumeUp', 'AudioVolumeMute',
+  'ContextMenu', 'Home', 'MediaPlayPause', 'MediaStop', 'BrowserForward',
+  'F1', 'F5', 'F8', 'F9', 'F12',
+];
+let count = 0;
+
+function logEvent(type, e) {
+  const entry = document.createElement('div');
+  const isMapped = MAPPED_KEYS.includes(e.key) || [166, 174, 175, 173].includes(e.keyCode);
+  entry.className = 'entry' + (isMapped ? ' mapped' : '');
+
+  const keyClass = isMapped ? '' : ' danger';
+  const codeClass = e.code.startsWith('Key') || e.code.startsWith('Arrow') || e.code.startsWith('Volume') ? '' : ' warn';
+
+  entry.innerHTML =
+    `<span class="label">[${type}]</span> ` +
+    `<span class="label">key=</span><span class="val${keyClass}">${esc(e.key)}</span> ` +
+    `<span class="label">code=</span><span class="val${codeClass}">${esc(e.code)}</span> ` +
+    `<span class="label">keyCode=</span><span class="val">${e.keyCode}</span> ` +
+    `<span class="label">which=</span><span class="val">${e.which}</span>`;
+
+  const log = document.getElementById('log');
+  log.prepend(entry);
+  count++;
+  document.getElementById('counter').textContent = count + ' eventos';
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.addEventListener('keydown', (e) => {
+  e.preventDefault();
+  logEvent('keydown', e);
+}, false);
+
+document.addEventListener('keyup', (e) => {
+  e.preventDefault();
+  logEvent('keyup', e);
+}, false);
+
+document.addEventListener('keypress', (e) => {
+  e.preventDefault();
+  logEvent('keypress', e);
+}, false);
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+  count = 0;
+  document.getElementById('counter').textContent = '0 eventos';
+}
+
+function exportLog() {
+  const entries = document.querySelectorAll('.entry');
+  const lines = Array.from(entries).reverse().map(e => e.textContent.trim());
+  const text = '=== FIFOtv Air Mouse Key Report ===\n' + lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('counter').textContent = count + ' eventos — copiado!';
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+[Unit]
+Description=FIFOtv Smart TV v2
+After=graphical.target
+
+[Service]
+Type=simple
+User=tv
+Environment=DISPLAY=:0
+WorkingDirectory=/home/tv/smarttv
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

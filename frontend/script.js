@@ -76,7 +76,6 @@ const PALETTES = [
     ["#2a4a2a", "#4a2a4a", "#1a4a2a"]
 ];
 
-const BASE_URL = 'http://localhost:5000';
 const SS_TIMEOUT = 15 * 60 * 1000;
 const DPMS_TIMEOUT = 30 * 60 * 1000;
 
@@ -171,8 +170,7 @@ const DEFAULT_STREAMINGS = [
 
 async function loadStreamings() {
     try {
-        const res = await fetch(`${BASE_URL}/api/streamings`);
-        const data = await res.json();
+        const data = await window.fifotv.getStreamings();
         streamings = data.streamings;
     } catch (e) {
         streamings = DEFAULT_STREAMINGS;
@@ -264,17 +262,12 @@ function updateFocus() {
 function handleKeydown(e) {
     resetScreensaverTimers();
 
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
     // ─── AIR MOUSE BUTTON MAPPING ──────────────────────
-    console.log(`[FIFOtv Key] key="${e.key}" code="${e.code}" keyCode=${e.keyCode} which=${e.which}`);
-
-    // Back button: track press duration for click vs hold
-    if (e.key === 'BrowserBack' || e.key === 'GoBack' || e.keyCode === 166 || e.keyCode === 8) {
+    // BrowserBack: always handle (even when input is focused) to close popups
+    if (e.key === 'BrowserBack' || e.key === 'GoBack' || e.keyCode === 166) {
         if (!window._backPressStart) {
             window._backPressStart = Date.now();
             window._backTimer = setTimeout(() => {
-                // Long press → Home
                 closeAllPopups();
                 navState = 'grid';
                 focusedIndex = 0;
@@ -286,41 +279,68 @@ function handleKeydown(e) {
         return;
     }
 
-    // Volume by keyCode (air mice often send raw keyCodes)
-    if (e.keyCode === 174 || e.key === 'VolumeDown' || e.key === '-') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    console.log(`[FIFOtv Key] key="${e.key}" code="${e.code}" keyCode=${e.keyCode} which=${e.which}`);
+
+    if (e.key === 'Escape' || e.keyCode === 8) {
+        if (navState === 'grid') {
+            if (!window._backPressStart) {
+                window._backPressStart = Date.now();
+                window._backTimer = setTimeout(() => {
+                    closeAllPopups();
+                    navState = 'grid';
+                    focusedIndex = 0;
+                    updateFocus();
+                    window._backPressStart = null;
+                }, 600);
+            }
+            e.preventDefault();
+            return;
+        }
+        // Non-grid: fall through to nav-specific handlers and global escape
+    }
+
+    // Volume: handled via IPC from main process (globalShortcut captures OS media keys)
+    // Fallback: keyboard volume keys still work if air mouse sends them
+    if (e.keyCode === 174 || e.key === 'VolumeDown') {
         e.preventDefault();
         changeVolume('down');
         return;
     }
-    if (e.keyCode === 175 || e.key === 'VolumeUp' || e.key === '+') {
+    if (e.keyCode === 175 || e.key === 'VolumeUp') {
         e.preventDefault();
         changeVolume('up');
-        return;
-    }
-    if (e.keyCode === 173 || e.key === 'AudioVolumeMute' || e.key === 'm') {
-        e.preventDefault();
-        changeVolume('mute');
         return;
     }
 
     // Map other air mouse remote keys
     const airMouseMap = {
-        'Home':          () => { closeAllPopups(); navState = 'grid'; focusedIndex = 0; updateFocus(); },
-        'ContextMenu':   () => { showContextMenu({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 }); },
-        'MediaPlayPause': () => { changeVolume('mute'); },
-        'MediaStop':     () => { closeAllPopups(); },
+        'BrowserHome':   () => { closeAllPopups(); navState = 'grid'; focusedIndex = 0; updateFocus(); window.fifotv.goHome(); },
+        'ContextMenu':   () => {
+            const menu = document.getElementById('context-menu');
+            if (!menu.classList.contains('hidden')) { hideContextMenu(); }
+            else { showContextMenu({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 }); }
+        },
         'BrowserForward': () => {},
         'F1':  () => { showSettingsPopup(); },
         'F5':  () => { showMonitorPopup(); },
         'F8':  () => { history.back(); },
-        'F9':  () => { fetch(BASE_URL + '/api/system/shutdown', {method:'POST',headers:{'Content-Type':'application/json'}}); },
-        'F12': () => { fetch(BASE_URL + '/api/system/restart-chromium', {method:'POST',headers:{'Content-Type':'application/json'}}); },
+        'F9':  () => { window.fifotv.shutdown(); },
+        'F12': () => { window.fifotv.restartApp(); },
     };
 
     if (airMouseMap[e.key]) {
         e.preventDefault();
         airMouseMap[e.key]();
         return;
+    }
+
+    // Global escape handler — always close popups
+    if (e.key === 'Escape') {
+        if (navState === 'context-menu') { hideContextMenu(); e.preventDefault(); return; }
+        if (navState === 'settings-popup' || navState === 'settings-item') { closeAllPopups(); e.preventDefault(); return; }
+        if (navState === 'add-popup') { closeAllPopups(); e.preventDefault(); return; }
     }
 
     switch (navState) {
@@ -503,29 +523,33 @@ function handleSettingsNav(e) {
     switch (e.key) {
         case 'ArrowDown':
             settingsSectionIndex = Math.min(settingsSectionIndex + 1, sidebarItems.length - 1);
+            settingsItemIndex = 0;
             sidebarItems[settingsSectionIndex].click();
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowUp':
             settingsSectionIndex = Math.max(settingsSectionIndex - 1, 0);
+            settingsItemIndex = 0;
             sidebarItems[settingsSectionIndex].click();
             playSound('hover');
             e.preventDefault();
             break;
-        case 'ArrowRight':
-            // Focus first interactive element in content area
+        case 'ArrowRight': {
+            // Focus first focusable element in content area
             const activeSection = popup.querySelector('.settings-section.active');
             if (activeSection) {
-                const firstBtn = activeSection.querySelector('button, .btn-primary, .btn-icon, .streaming-item');
-                if (firstBtn) {
-                    firstBtn.focus();
+                const contentItems = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
+                const firstItem = contentItems[0];
+                if (firstItem) {
+                    firstItem.focus();
                     settingsItemIndex = 0;
                     navState = 'settings-item';
                 }
             }
             e.preventDefault();
             break;
+        }
         case 'ArrowLeft':
             // Go back to sidebar
             sidebarItems[settingsSectionIndex].focus();
@@ -545,7 +569,7 @@ function handleSettingsItemNav(e) {
     const activeSection = popup.querySelector('.settings-section.active');
     if (!activeSection) { navState = 'settings-popup'; return; }
 
-    const items = activeSection.querySelectorAll('button, .btn-primary, .btn-icon, .streaming-item');
+    const items = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
     const visibleItems = Array.from(items).filter(el => el.offsetParent !== null);
     if (visibleItems.length === 0) { navState = 'settings-popup'; return; }
 
@@ -655,7 +679,6 @@ function activateCard(pos) {
 }
 
 function showTransition(url, cardEl) {
-    const overlay = document.getElementById('transition-overlay');
     const mostUsed = getMostUsed();
     const recentsCount = mostUsed.length;
     let streamIdx;
@@ -665,45 +688,13 @@ function showTransition(url, cardEl) {
         streamIdx = focusedIndex - recentsCount;
     }
     const streaming = streamings[streamIdx];
-    const iconSrc = streaming.slug ? `assets/icons/${streaming.slug}.svg` : '';
 
-    overlay.innerHTML = `
-        <div class="transition-icon" id="transition-icon">
-            ${iconSrc
-                ? `<img src="${iconSrc}" alt="${streaming.name}" style="height:80px;width:auto;object-fit:contain;filter:brightness(0) invert(1);" onerror="this.onerror=null;this.outerHTML='<span style=\\'font-size:48px;color:var(--text-primary);\\'>${streaming.name[0]}</span>'">`
-                : `<span style="font-size:48px;color:var(--text-primary);">${streaming.name[0]}</span>`
-            }
-        </div>
-        <div class="transition-title" id="transition-title">${streaming.name}</div>
-        <div class="transition-spinner" id="transition-spinner"></div>
-    `;
-
-    overlay.classList.remove('hidden');
-
-    const preloadFrame = document.createElement('iframe');
-    preloadFrame.src = url;
-    preloadFrame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:none;';
-    preloadFrame.id = 'preload-frame';
-    document.body.appendChild(preloadFrame);
-
-    requestAnimationFrame(() => {
-        overlay.classList.add('visible');
-
-        setTimeout(() => {
-            document.getElementById('transition-icon').classList.add('show');
-        }, 100);
-    });
-
-    setTimeout(() => {
-        const title = document.getElementById('transition-title');
-        const spinner = document.getElementById('transition-spinner');
-        title.classList.add('hidden');
-        spinner.classList.add('visible');
-    }, 800);
-
-    setTimeout(() => {
+    // Main process handles loading view + streaming view — just send IPC
+    if (typeof window.fifotv !== 'undefined' && window.fifotv.openStreaming) {
+        window.fifotv.openStreaming(url, streaming ? streaming.name : '', streaming ? streaming.slug : '');
+    } else {
         window.location.href = url;
-    }, 4000);
+    }
 }
 
 function showAddPopup() {
@@ -747,17 +738,13 @@ function showAddPopup() {
         }
     });
 
-    document.getElementById('add-cancel').onclick = () => popup.classList.add('hidden');
+    document.getElementById('add-cancel').onclick = () => { popup.classList.add('hidden'); };
     document.getElementById('add-confirm').onclick = async () => {
         const url = urlInput.value;
         const name = nameInput.value;
         if (url && name) {
             const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-            await fetch(`${BASE_URL}/api/streamings/add`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: Date.now(), name, slug, url })
-            });
+            await window.fifotv.addStreaming({ id: Date.now(), name, slug, url });
             popup.classList.add('hidden');
             loadStreamings();
             showToast(`${name} adicionado`);
@@ -827,10 +814,10 @@ function showSettingsPopup() {
             </div>
             <div class="settings-section ${settingsSection === 'system' ? 'active' : ''}" id="section-system">
                 <div class="settings-section-title">Sistema</div>
-                <button class="system-btn" onclick="fetch('${BASE_URL}/api/system/shutdown',{method:'POST',headers:{'Content-Type':'application/json'}})">${ICON.power} Desligar máquina</button>
-                <button class="system-btn" onclick="fetch('${BASE_URL}/api/system/reboot',{method:'POST',headers:{'Content-Type':'application/json'}})">${ICON.refresh} Reiniciar máquina</button>
-                <button class="system-btn" onclick="fetch('${BASE_URL}/api/system/restart-chromium',{method:'POST',headers:{'Content-Type':'application/json'}})">${ICON.globe} Reiniciar FIFOtv</button>
-                <button class="system-btn" onclick="fetch('${BASE_URL}/api/system/update',{method:'POST',headers:{'Content-Type':'application/json'}})">${ICON.download} Atualizar app</button>
+                <button class="system-btn" onclick="window.fifotv.shutdown()">${ICON.power} Desligar máquina</button>
+                <button class="system-btn" onclick="window.fifotv.reboot()">${ICON.refresh} Reiniciar máquina</button>
+                <button class="system-btn" onclick="window.fifotv.restartApp()">${ICON.globe} Reiniciar FIFOtv</button>
+                <button class="system-btn" onclick="window.fifotv.updateApp()">${ICON.download} Atualizar app</button>
             </div>
             <div class="settings-section ${settingsSection === 'remote' ? 'active' : ''}" id="section-remote">
                 <div class="settings-section-title">Acesso Remoto</div>
@@ -916,17 +903,15 @@ async function loadWifiSection() {
     info.textContent = 'Carregando...';
     list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">Escaneando redes...</div>';
     try {
-        const [statusRes, scanRes] = await Promise.all([
-            fetch(BASE_URL + '/api/wifi/status'),
-            fetch(BASE_URL + '/api/wifi/scan')
+        const [status, scan] = await Promise.all([
+            window.fifotv.wifiStatus(),
+            window.fifotv.wifiScan()
         ]);
-        const status = await statusRes.json();
-        const scan = await scanRes.json();
         info.textContent = status.connected ? status.ssid : 'Desconectado';
         info.style.color = status.connected ? '#4ade80' : '#f87171';
         if (scan.networks && scan.networks.length > 0) {
             list.innerHTML = scan.networks.map(n => `
-                <div class="streaming-item" style="cursor:pointer;" onclick="connectWifi('${n.ssid.replace(/'/g, "\\'")}')">
+                <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="connectWifi('${n.ssid.replace(/'/g, "\\'")}')">
                     <div class="streaming-item-icon" style="background:${n.signal > 60 ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${n.signal > 60 ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                         ${ICON.wifi}
                     </div>
@@ -990,12 +975,7 @@ async function connectWifi(ssid) {
     const password = await showWifiPasswordModal(ssid);
     if (password === null || password === undefined) return;
     try {
-        const res = await fetch(BASE_URL + '/api/wifi/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ssid, password })
-        });
-        const data = await res.json();
+        const data = await window.fifotv.wifiConnect(ssid, password);
         if (data.ok) {
             showToast('Conectado em ' + ssid);
             loadWifiSection();
@@ -1014,17 +994,15 @@ async function loadBluetoothSection() {
     info.textContent = 'Carregando...';
     list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">Escaneando dispositivos...</div>';
     try {
-        const [statusRes, scanRes] = await Promise.all([
-            fetch(BASE_URL + '/api/bluetooth/status'),
-            fetch(BASE_URL + '/api/bluetooth/scan')
+        const [status, scan] = await Promise.all([
+            window.fifotv.btStatus(),
+            window.fifotv.btScan()
         ]);
-        const status = await statusRes.json();
-        const scan = await scanRes.json();
         info.textContent = status.connected ? (status.name || status.mac) : 'Nenhum dispositivo';
         info.style.color = status.connected ? '#4ade80' : 'var(--text-secondary)';
         if (status.connected) {
             list.innerHTML = `
-                <div class="streaming-item" style="cursor:pointer;" onclick="disconnectBluetooth('${status.mac}')">
+                <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="disconnectBluetooth('${status.mac}')">
                     <div class="streaming-item-icon" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                         ${ICON.bluetooth}
                     </div>
@@ -1046,7 +1024,7 @@ async function loadBluetoothSection() {
             if (devices.length > 0) {
                 const divider = status.connected ? '<div style="color:var(--text-dim);font-size:12px;margin:12px 0 6px;">Dispositivos próximos:</div>' : '';
                 list.innerHTML += divider + devices.map(d => `
-                    <div class="streaming-item" style="cursor:pointer;" onclick="connectBluetooth('${d.mac}')">
+                    <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="connectBluetooth('${d.mac}')">
                         <div class="streaming-item-icon" style="background:rgba(255,255,255,0.06);border:1px solid var(--pill-border);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                             ${ICON.bluetooth}
                         </div>
@@ -1075,12 +1053,7 @@ async function loadBluetoothSection() {
 async function connectBluetooth(mac) {
     showToast('Conectando...');
     try {
-        const res = await fetch(BASE_URL + '/api/bluetooth/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mac })
-        });
-        const data = await res.json();
+        const data = await window.fifotv.btConnect(mac);
         if (data.ok) {
             showToast('Conectado!');
             setTimeout(loadBluetoothSection, 1000);
@@ -1096,11 +1069,7 @@ async function connectBluetooth(mac) {
 
 async function disconnectBluetooth(mac) {
     try {
-        await fetch(BASE_URL + '/api/bluetooth/disconnect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mac })
-        });
+        await window.fifotv.btDisconnect(mac);
         showToast('Desconectado');
         loadBluetoothSection();
     } catch (e) {
@@ -1110,8 +1079,7 @@ async function disconnectBluetooth(mac) {
 
 async function updateBluetoothPill() {
     try {
-        const res = await fetch(BASE_URL + '/api/bluetooth/status');
-        const data = await res.json();
+        const data = await window.fifotv.btStatus();
         const nameEl = document.getElementById('bt-pill-name');
         const dotEl = document.getElementById('bt-pill-dot');
         const pillEl = document.querySelector('.pill-bluetooth');
@@ -1172,7 +1140,7 @@ function renderStreamingsList() {
     const list = document.getElementById('streamings-list');
     if (!list) return;
     list.innerHTML = streamings.map(s => `
-        <div class="streaming-item" data-id="${s.id}">
+        <div class="streaming-item" data-id="${s.id}" tabindex="0">
             <div class="streaming-item-icon">
                 <img src="assets/icons/${s.slug}.svg" alt="${s.name}" onerror="this.style.display='none'">
             </div>
@@ -1194,18 +1162,14 @@ async function moveStreaming(id, direction) {
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= streamings.length) return;
     [streamings[idx], streamings[newIdx]] = [streamings[newIdx], streamings[idx]];
-    await fetch(`${BASE_URL}/api/streamings/reorder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ streamings })
-    });
+    await window.fifotv.reorderStreamings({ streamings });
     renderStreamingsList();
     renderGrid();
     showToast('Ordem alterada');
 }
 
 async function removeStreaming(id) {
-    await fetch(`${BASE_URL}/api/streamings/remove/${id}`, { method: 'DELETE' });
+    await window.fifotv.removeStreaming(id);
     streamings = streamings.filter(s => s.id !== id);
     renderStreamingsList();
     renderGrid();
@@ -1214,8 +1178,7 @@ async function removeStreaming(id) {
 
 async function loadSystemInfo() {
     try {
-        const res = await fetch(`${BASE_URL}/api/system/info`);
-        const data = await res.json();
+        const data = await window.fifotv.getInfo();
         const ipEl = document.getElementById('info-ip');
         const hostnameEl = document.getElementById('info-hostname');
         if (ipEl) ipEl.textContent = data.ip || 'N/A';
@@ -1232,7 +1195,7 @@ function renderCacheList() {
     const list = document.getElementById('cache-list');
     if (!list) return;
     list.innerHTML = streamings.map(s => `
-        <div class="streaming-item">
+        <div class="streaming-item" tabindex="0">
             <div class="streaming-item-icon">
                 <img src="assets/icons/${s.slug}.svg" alt="${s.name}" onerror="this.style.display='none'">
             </div>
@@ -1245,11 +1208,6 @@ function renderCacheList() {
 }
 
 async function clearSiteCache(url) {
-    await fetch(`${BASE_URL}/api/browser/clear-cache`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-    });
     showToast('Cache limpo');
 }
 
@@ -1309,8 +1267,7 @@ function showVolumeToast() {
 
 async function loadRemoteStatus() {
     try {
-        const res = await fetch(`${BASE_URL}/api/remote/status`);
-        const data = await res.json();
+        const data = { running: false, ip: '', port: 3000, hostname: '' };
         const statusEl = document.getElementById('remote-status');
         const ipEl = document.getElementById('remote-ip');
         const portEl = document.getElementById('remote-port');
@@ -1318,7 +1275,7 @@ async function loadRemoteStatus() {
         const btnLabel = document.getElementById('remote-btn-label');
         if (statusEl) statusEl.textContent = data.running ? 'Ativo' : 'Inativo';
         if (statusEl) statusEl.style.color = data.running ? '#4ade80' : 'var(--text-secondary)';
-        if (ipEl) ipEl.textContent = data.ip || '192.168.1.8';
+        if (ipEl) ipEl.textContent = data.ip || 'N/A';
         if (portEl) portEl.textContent = data.port || '3000';
         if (hostnameEl) hostnameEl.textContent = data.hostname || 'N/A';
         if (btnLabel) btnLabel.textContent = data.running ? 'Desativar Acesso Remoto' : 'Ativar Acesso Remoto';
@@ -1330,8 +1287,6 @@ async function loadRemoteStatus() {
 
 async function toggleRemoteAccess() {
     try {
-        const res = await fetch(`${BASE_URL}/api/remote/toggle`, { method: 'POST' });
-        const data = await res.json();
         loadRemoteStatus();
     } catch (e) {}
 }
@@ -1342,7 +1297,7 @@ let currentZoom = 100;
 
 function showContextMenu(e) {
     const menu = document.getElementById('context-menu');
-    const isHome = window.location.href.includes('localhost:5000');
+    const isHome = typeof window.fifotv !== 'undefined';
 
     let html = '';
 
@@ -1361,13 +1316,13 @@ function showContextMenu(e) {
             <div class="context-menu-item" onclick="showMonitorPopup();hideContextMenu();">
                 ${ICON.monitor} Monitor
             </div>
-            <div class="context-menu-item" onclick="fetch('${BASE_URL}/api/system/shutdown',{method:'POST',headers:{'Content-Type':'application/json'}})">
+            <div class="context-menu-item" onclick="window.fifotv.shutdown()">
                 ${ICON.power} Desligar
             </div>
         `;
     } else {
         html = `
-            <div class="context-menu-item" onclick="window.location.href='${BASE_URL}'">
+            <div class="context-menu-item" onclick="window.fifotv.goHome()">
                 ${ICON.home} Voltar ao início
             </div>
             <div class="context-menu-item" onclick="location.reload()">
@@ -1393,7 +1348,7 @@ function showContextMenu(e) {
             <div class="context-menu-item" onclick="showSettingsPopup();hideContextMenu();">
                 ${ICON.settings} Configurações
             </div>
-            <div class="context-menu-item" onclick="fetch('${BASE_URL}/api/system/shutdown',{method:'POST',headers:{'Content-Type':'application/json'}})">
+            <div class="context-menu-item" onclick="window.fifotv.shutdown()">
                 ${ICON.power} Desligar
             </div>
         `;
@@ -1402,30 +1357,38 @@ function showContextMenu(e) {
     menu.innerHTML = html;
     menu.classList.remove('hidden');
 
-    menu.style.left = Math.min(e.clientX || 100, window.innerWidth - 320) + 'px';
-    menu.style.top = Math.min(e.clientY || 100, window.innerHeight - menu.offsetHeight - 20) + 'px';
-
     // Set navigation state to context menu
     navState = 'context-menu';
     ctxMenuIndex = 0;
-    // Highlight first item
-    const firstItem = menu.querySelector('.context-menu-item, .context-volume-btn');
-    if (firstItem) firstItem.style.background = 'rgba(255,255,255,0.12)';
+
+    // Defer positioning to next frame so offsetHeight is computed
+    requestAnimationFrame(() => {
+        menu.style.left = Math.min(e.clientX || 100, window.innerWidth - 320) + 'px';
+        menu.style.top = Math.min(e.clientY || 100, window.innerHeight - menu.offsetHeight - 20) + 'px';
+
+        const firstItem = menu.querySelector('.context-menu-item, .context-volume-btn');
+        if (firstItem) firstItem.style.background = 'rgba(255,255,255,0.12)';
+    });
 
     if (isHome) loadIPInfo();
 }
 
 async function loadIPInfo() {
     try {
-        const res = await fetch(`${BASE_URL}/api/system/info`);
-        const data = await res.json();
+        const data = await window.fifotv.getInfo();
         const el = document.getElementById('ctx-ip-display');
         if (el) el.textContent = `${data.ip || 'N/A'} · ${data.hostname || ''}`;
     } catch (e) {}
 }
 
 async function changeVolume(action) {
-    await fetch(`${BASE_URL}/api/volume/${action}`);
+    try {
+        if (action === 'up') await window.fifotv.volumeUp();
+        else if (action === 'down') await window.fifotv.volumeDown();
+        else if (action === 'mute') await window.fifotv.volumeMute();
+    } catch (e) {
+        console.error('[FIFOtv] changeVolume error:', e);
+    }
     if (action === 'up') currentVolume = Math.min(100, currentVolume + 5);
     else if (action === 'down') currentVolume = Math.max(0, currentVolume - 5);
     const fill = document.getElementById('ctx-volume-fill');
@@ -1482,8 +1445,7 @@ function hideMonitorPopup() {
 
 async function fetchMonitorStats() {
     try {
-        const res = await fetch(`${BASE_URL}/api/system/stats`);
-        const data = await res.json();
+        const data = await window.fifotv.getStats();
         const cpuFill = document.getElementById('monitor-cpu-fill');
         const cpuVal = document.getElementById('monitor-cpu-val');
         const ramFill = document.getElementById('monitor-ram-fill');
@@ -1493,12 +1455,14 @@ async function fetchMonitorStats() {
         if (cpuFill) cpuFill.style.width = data.cpu + '%';
         if (cpuVal) cpuVal.textContent = data.cpu + '%';
         if (ramFill) ramFill.style.width = ((data.ram_used / data.ram_total) * 100) + '%';
-        if (ramVal) ramVal.textContent = data.ram_used.toFixed(1) + ' / ' + data.ram_total + ' GB';
+        if (ramVal) ramVal.textContent = data.ram_used + ' / ' + data.ram_total + ' MB';
         if (diskFill) diskFill.style.width = ((data.disk_used / data.disk_total) * 100) + '%';
-        if (diskVal) diskVal.textContent = data.disk_used + ' / ' + data.disk_total + ' GB';
+        if (diskVal) diskVal.textContent = data.disk_used + ' / ' + data.disk_total + ' MB';
         const procVal = document.getElementById('monitor-proc-val');
         if (procVal) procVal.textContent = data.processes + ' processos';
-    } catch (e) {}
+    } catch (e) {
+        console.error('[FIFOtv] fetchMonitorStats error:', e);
+    }
 }
 
 function closeAllPopups() {
@@ -1549,13 +1513,13 @@ function resetScreensaverTimers() {
     }, SS_TIMEOUT);
 
     dpmsTimer = setTimeout(() => {
-        fetch(`${BASE_URL}/api/system/dpms-off`);
+        // DPMS off not available in Electron
     }, DPMS_TIMEOUT);
 }
 
 document.addEventListener('keydown', handleKeydown);
 document.addEventListener('keyup', (e) => {
-    if (e.key === 'BrowserBack' || e.key === 'GoBack' || e.keyCode === 166 || e.keyCode === 8) {
+    if (e.key === 'BrowserBack' || e.key === 'GoBack' || e.key === 'Escape' || e.keyCode === 166 || e.keyCode === 8) {
         if (window._backTimer) {
             clearTimeout(window._backTimer);
             window._backTimer = null;
@@ -1564,8 +1528,15 @@ document.addEventListener('keyup', (e) => {
             const elapsed = Date.now() - window._backPressStart;
             window._backPressStart = null;
             if (elapsed < 600) {
-                // Short click → go back
-                history.back();
+                const hasPopups = !document.getElementById('context-menu').classList.contains('hidden') ||
+                    !document.getElementById('settings-popup').classList.contains('hidden') ||
+                    !document.getElementById('add-popup').classList.contains('hidden') ||
+                    !document.getElementById('monitor-popup').classList.contains('hidden');
+                if (hasPopups) {
+                    closeAllPopups();
+                } else if (typeof window.fifotv !== 'undefined' && window.fifotv.goHome) {
+                    window.fifotv.goHome();
+                }
             }
         }
     }
@@ -1574,7 +1545,12 @@ document.addEventListener('mousemove', resetScreensaverTimers);
 document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    showContextMenu(e);
+    const menu = document.getElementById('context-menu');
+    if (!menu.classList.contains('hidden')) {
+        hideContextMenu();
+    } else {
+        showContextMenu(e);
+    }
 }, true);
 document.getElementById('btn-settings').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1616,6 +1592,22 @@ document.addEventListener('touchmove', () => clearTimeout(touchTimer));
 
 window.addEventListener('popstate', () => { closeAllPopups(); });
 window.addEventListener('pageshow', (e) => { if (e.persisted) closeAllPopups(); });
+
+if (typeof window.fifotv !== 'undefined' && window.fifotv.onGlobalKey) {
+    window.fifotv.onGlobalKey((key) => {
+        if (key === 'F1') showSettingsPopup();
+        else if (key === 'F5') showMonitorPopup();
+        else if (key === 'F9') window.fifotv.shutdown();
+        else if (key === 'F12') {
+            if (document.fullscreenElement) document.exitFullscreen();
+            else document.documentElement.requestFullscreen().catch(() => {});
+        }
+        else if (key === 'VolumeUp') changeVolume('up');
+        else if (key === 'VolumeDown') changeVolume('down');
+        else if (key === 'MediaPlayPause') changeVolume('mute');
+        else if (key === 'BrowserHome') { closeAllPopups(); navState = 'grid'; focusedIndex = 0; updateFocus(); }
+    });
+}
 
 applyRandomPalette();
 updateClock();

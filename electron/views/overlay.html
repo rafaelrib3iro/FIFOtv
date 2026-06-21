@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FIFOtv Overlay</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  <div id="fifotv-monitor" class="fifotv-monitor fifotv-hidden">
+    <div class="fifotv-monitor-grid">
+      <div class="fifotv-monitor-card">
+        <div class="fifotv-monitor-card-header">
+          <div class="fifotv-monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+          <div class="fifotv-monitor-card-label">CPU</div>
+        </div>
+        <div class="fifotv-monitor-card-value" id="fifotv-monitor-cpu-val">—</div>
+        <div class="fifotv-monitor-bar"><div class="fifotv-monitor-bar-fill" id="fifotv-monitor-cpu-fill" style="width:0%"></div></div>
+      </div>
+      <div class="fifotv-monitor-card">
+        <div class="fifotv-monitor-card-header">
+          <div class="fifotv-monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+          <div class="fifotv-monitor-card-label">RAM</div>
+        </div>
+        <div class="fifotv-monitor-card-value" id="fifotv-monitor-ram-val">—</div>
+        <div class="fifotv-monitor-bar"><div class="fifotv-monitor-bar-fill" id="fifotv-monitor-ram-fill" style="width:0%"></div></div>
+      </div>
+      <div class="fifotv-monitor-card">
+        <div class="fifotv-monitor-card-header">
+          <div class="fifotv-monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+          <div class="fifotv-monitor-card-label">Disco</div>
+        </div>
+        <div class="fifotv-monitor-card-value" id="fifotv-monitor-disk-val">—</div>
+        <div class="fifotv-monitor-bar"><div class="fifotv-monitor-bar-fill" id="fifotv-monitor-disk-fill" style="width:0%"></div></div>
+      </div>
+      <div class="fifotv-monitor-card">
+        <div class="fifotv-monitor-card-header">
+          <div class="fifotv-monitor-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
+          <div class="fifotv-monitor-card-label">Processos</div>
+        </div>
+        <div class="fifotv-monitor-card-value" id="fifotv-monitor-proc-val">—</div>
+      </div>
+    </div>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

@@ -45,7 +45,7 @@
             height: 100%;
             background: #fff;
             border-radius: 2px;
-            animation: loading 2.5s ease-in-out forwards;
+            animation: loading 3s ease-in-out forwards;
         }
 
         @keyframes fadeIn {
@@ -69,36 +69,5 @@
             <div class="splash-bar-fill" id="splash-bar"></div>
         </div>
     </div>
-
-    <script>
-        const sfx = new Audio('assets/sounds/splash.mp3');
-        sfx.volume = 0.3;
-        sfx.play().catch(() => {});
-
-        const BACKEND_URL = 'http://localhost:5000';
-        let attempts = 0;
-        const maxAttempts = 30;
-
-        async function checkBackend() {
-            try {
-                const res = await fetch(BACKEND_URL + '/api/streamings', { method: 'HEAD' });
-                if (res.ok || res.status === 304) {
-                    window.location.href = BACKEND_URL + '/app';
-                    return;
-                }
-            } catch (e) {}
-
-            attempts++;
-            if (attempts < maxAttempts) {
-                setTimeout(checkBackend, 1000);
-            } else {
-                // Backend didn't start, try direct file access
-                window.location.href = 'index.html';
-            }
-        }
-
-        // Start checking after initial animation
-        setTimeout(checkBackend, 1500);
-    </script>
 </body>
 </html>

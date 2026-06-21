@@ -1,0 +1,35 @@
+{
+  "name": "fifotv",
+  "version": "2.0.0",
+  "description": "FIFOtv — Smart TV kiosk",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron . --kiosk",
+    "build": "electron-builder --linux deb",
+    "dist": "electron-builder --linux AppImage"
+  },
+  "dependencies": {
+    "dbus-next": "^0.10.2"
+  },
+  "devDependencies": {
+    "electron": "https://github.com/castlabs/electron-releases#v42.3.3+wvcus",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.fifotv.app",
+    "productName": "FIFOtv",
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "AudioVideo"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/**/*",
+      "package.json"
+    ]
+  }
+}

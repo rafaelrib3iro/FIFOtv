@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=FIFOtv (Dev)
+Comment=Rodar FIFOtv em modo desenvolvimento
+Exec=bash /home/rafael/Documentos/FIFOtv/scripts/dev.sh
+Icon=/home/rafael/Documentos/FIFOtv/frontend/FIFOtv.svg
+Terminal=true
+Type=Application
+Categories=Development;
