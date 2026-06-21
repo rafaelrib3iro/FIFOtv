@@ -30,7 +30,7 @@ echo "[2/7] Instalando dependências npm..."
 npm install
 echo "  OK"
 
-# 4. Atualiza .xinitrc (só xset + unclutter, sem Flask/Openbox/Chromium)
+# 4. Atualiza .xinitrc (só xset, sem Flask/Openbox/Chromium)
 echo "[3/7] Atualizando .xinitrc..."
 cat > /home/tv/.xinitrc << 'XINITRC'
 #!/bin/bash
@@ -38,7 +38,6 @@ cat > /home/tv/.xinitrc << 'XINITRC'
 xset s off
 xset -dpms
 xset s noblank
-unclutter -idle 0 &
 wait
 XINITRC
 chmod +x /home/tv/.xinitrc

@@ -11,6 +11,9 @@
 | 5 | Seção "Extensões" no settings não deve existir | ✅ Resolvido | — |
 | 6 | Sem som nenhum (caixa nativa + P2) | ✅ Resolvido | — |
 | 7 | Checklist do desenvolvimento deve ser removido | ✅ Resolvido | — |
+| 8 | Bluetooth não conecta (br-connection-page-timeout) | ✅ Resolvido | — |
+| 9 | Mouse cursor some rapidamente (invisível ao usar) | ✅ Resolvido | — |
+| 10 | Foco não volta pro streaming após toast/menu | ✅ Resolvido | — |
 
 ---
 
@@ -137,3 +140,57 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 **Fix:** Removido HTML do checklist em `index.html` (botão FAB + painel), referência `<script src="checklist.js">`, todo o CSS do checklist em `style.css` (~280 linhas), e deletado `frontend/checklist.js`.
 
 **Arquivos:** `frontend/script.js`, `frontend/index.html`, `frontend/style.css`, `frontend/checklist.js` (deletado)
+
+---
+
+## Bug 8 — Bluetooth não conecta (br-connection-page-timeout)
+
+**Descrição:** Dispositivos Bluetooth aparecem corretamente no scan, mas ao tentar conectar aparece "Falha: br-connection-page-timeout" no frontend.
+
+**Causa:** `bt:connect` chamava `Device1.Connect()` diretamente sem pareamento prévio. O BlueZ precisa de um bond (link key) antes de conectar. Sem isso, o device remoto rejeita a página de conexão.
+
+**Fix:**
+1. Criado `BluezAgent` — agent de pareamento D-Bus `NoInputNoOutput` via `dbus-next` `Interface.configureMembers()`
+2. Agent registrado no startup com `AgentManager1.RegisterAgent()` + `RequestDefaultAgent()`
+3. `bt:connect` reescrito: check Connected → Pair (com polling Paired) → Trust → Connect (com polling Connected)
+4. Tratamento de erros `AlreadyExists` e `AlreadyConnected` via `e.type`
+5. Novo handler `bt:unpair` — `Adapter1.RemoveDevice()`
+6. `bt:scan` adicionado `Pairable=true` + `Discoverable=true` antes do discovery
+7. Frontend: botão "Esquecer" (trash) + "Desconectar" (X), `onclick` só nos ícones
+
+**Arquivos:** `electron/main.js`, `electron/preload.js`, `frontend/script.js`
+
+---
+
+## Bug 9 — Mouse cursor some rapidamente (invisível ao usar)
+
+**Descrição:** O ponteiro do mouse fica invisível e só aparece por ~1s quando movido, impedindo de usar o mouse normalmente.
+
+**Causa:** `unclutter -idle 0` no `.xinitrc` escondia o cursor instantaneamente.
+
+**Fix:**
+1. Removido `unclutter` completamente (de `.xinitrc`, `update.sh`, `restart.sh`, `configure.sh`, `setup.sh`)
+2. Criado cursor customizado: `tv-dot.png` (bolinha branca 32x32 com glow) e `tv-dot-hover.png` (com tint azul)
+3. CSS global de cursor em `frontend/style.css` e `electron/views/overlay.css`
+4. Cursor injetado no streamingView via `insertCSS()` com base64 data URIs (bypass CSP)
+5. Timer de idle: 3s sem mouse → `fifotv-cursor-idle` → `cursor: none`
+6. Electron agora tem controle total do cursor
+
+**Arquivos:** `electron/main.js`, `frontend/style.css`, `electron/views/overlay.css`, `frontend/assets/cursors/`, `system/.xinitrc`, `update.sh`, `system/scripts/restart.sh`, `system/install/configure.sh`, `system/install/setup.sh`
+
+---
+
+## Bug 10 — Foco não volta pro streaming após toast/menu
+
+**Descrição:** Ao mudar o volume ou abrir/fechar o menu de contexto, a tela pisca e o streaming perde o foco. Não é possível recuperar com click do mouse.
+
+**Causa:** Handlers IPC usavam `removeChildView(streamingView) + addChildView(streamingView)` pra reordenar views. Isso removia o streaming do compositor (flash preto) e causava re-compositing GPU (congelamento ~1s). Além disso, `overlay:toast-hide` não chamava `focus()`.
+
+**Fix — abordagem add/remove overlay:**
+1. Overlay **não é adicionado** na hierarquia na abertura de streaming (fica fora)
+2. `overlay:show-menu` / `overlay:toast-show`: `addChildView(overlayView)` — overlay aparece no topo
+3. `overlay:hide-menu` / `overlay:toast-hide`: `removeChildView(overlayView)` — overlay some da hierarquia
+4. StreamingView **NUNCA é removido** → zero flash, zero congelamento
+5. `streamingView.webContents.focus()` chamado após cada remoção do overlay
+
+**Arquivos:** `electron/main.js`

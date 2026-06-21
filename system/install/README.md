@@ -58,7 +58,7 @@ Reboot → Login automático → Smart TV pronta
 ### setup.sh
 - Atualiza sistema
 - Instala: Xorg, Openbox, Chromium, PipeWire, BlueZ, NetworkManager
-- Instala: Python3, Flask, xdotool, unclutter
+- Instala: Python3, Flask, xdotool
 - Instala: openssh-server, git, imagemagick, fbi
 - Habilita serviços: bluetooth, NetworkManager, SSH
 

@@ -69,7 +69,7 @@ ok "Flask instalado"
 
 # ─── 8. UTILITÁRIOS ────────────────────────────────────
 log "Instalando utilitários..."
-    apt-get install -y -qq xdotool unclutter curl wget
+    apt-get install -y -qq xdotool curl wget
 ok "Utilitários instalados"
 
 # ─── 9. SISTEMA ────────────────────────────────────────
@@ -121,7 +121,7 @@ echo "  • PipeWire (áudio)"
 echo "  • BlueZ (Bluetooth)"
 echo "  • NetworkManager (Wi-Fi)"
 echo "  • Python3 + Flask"
-echo "  • xdotool + unclutter"
+echo "  • xdotool"
 echo "  • OpenSSH + git"
 echo "  • ImageMagick + fbi (boot splash)"
 echo "  • OpenCode (AI coding agent)"

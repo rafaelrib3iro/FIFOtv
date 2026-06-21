@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('fifotv', {
   btScan: () => ipcRenderer.invoke('bt:scan'),
   btConnect: (mac) => ipcRenderer.invoke('bt:connect', mac),
   btDisconnect: (mac) => ipcRenderer.invoke('bt:disconnect', mac),
+  btUnpair: (mac) => ipcRenderer.invoke('bt:unpair', mac),
 
   // Navegação
   openStreaming: (url, name, slug) => ipcRenderer.invoke('nav:open-streaming', url, name, slug),

@@ -805,7 +805,7 @@ function showSettingsPopup() {
                 <button class="system-btn" onclick="window.fifotv.shutdown()">${ICON.power} Desligar máquina</button>
                 <button class="system-btn" onclick="window.fifotv.reboot()">${ICON.refresh} Reiniciar máquina</button>
                 <button class="system-btn" onclick="window.fifotv.restartApp()">${ICON.globe} Reiniciar FIFOtv</button>
-                <button class="system-btn" onclick="window.fifotv.updateApp()">${ICON.download} Atualizar app</button>
+                <button class="system-btn" onclick="updateApp()">${ICON.download} Atualizar app</button>
             </div>
             <div class="settings-section ${settingsSection === 'remote' ? 'active' : ''}" id="section-remote">
                 <div class="settings-section-title">Acesso Remoto</div>
@@ -988,7 +988,7 @@ async function loadBluetoothSection() {
         info.style.color = status.connected ? '#4ade80' : 'var(--text-secondary)';
         if (status.connected) {
             list.innerHTML = `
-                <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="disconnectBluetooth('${status.mac}')">
+                <div class="streaming-item" style="cursor:default;">
                     <div class="streaming-item-icon" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                         ${ICON.bluetooth}
                     </div>
@@ -997,7 +997,10 @@ async function loadBluetoothSection() {
                         <div class="streaming-item-url">${status.mac}</div>
                     </div>
                     <div class="streaming-item-actions">
-                        <button class="btn-icon" title="Desconectar" style="color:#f87171;">
+                        <button class="btn-icon" title="Esquecer" onclick="unpairBluetooth('${status.mac}')" style="color:#f87171;">
+                            ${ICON.trash}
+                        </button>
+                        <button class="btn-icon" title="Desconectar" onclick="disconnectBluetooth('${status.mac}')" style="color:#fbbf24;">
                             ${ICON.x}
                         </button>
                     </div>
@@ -1010,7 +1013,7 @@ async function loadBluetoothSection() {
             if (devices.length > 0) {
                 const divider = status.connected ? '<div style="color:var(--text-dim);font-size:12px;margin:12px 0 6px;">Dispositivos próximos:</div>' : '';
                 list.innerHTML += divider + devices.map(d => `
-                    <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="connectBluetooth('${d.mac}')">
+                    <div class="streaming-item" style="cursor:default;">
                         <div class="streaming-item-icon" style="background:rgba(255,255,255,0.06);border:1px solid var(--pill-border);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                             ${ICON.bluetooth}
                         </div>
@@ -1019,7 +1022,7 @@ async function loadBluetoothSection() {
                             <div class="streaming-item-url">${d.mac}</div>
                         </div>
                         <div class="streaming-item-actions">
-                            <button class="btn-icon" title="Conectar" style="color:var(--text-secondary);">
+                            <button class="btn-icon" title="Conectar" onclick="connectBluetooth('${d.mac}')" style="color:var(--text-secondary);">
                                 ${ICON.monitor}
                             </button>
                         </div>
@@ -1044,7 +1047,7 @@ async function connectBluetooth(mac) {
             showToast('Conectado!');
             setTimeout(loadBluetoothSection, 1000);
         } else {
-            const detail = data.output ? data.output.slice(-120) : (data.error || 'Desconhecido');
+            const detail = data.error || 'Desconhecido';
             showToast('Falha: ' + detail);
             console.log('[BT Connect]', data);
         }
@@ -1060,6 +1063,21 @@ async function disconnectBluetooth(mac) {
         loadBluetoothSection();
     } catch (e) {
         showToast('Erro ao desconectar');
+    }
+}
+
+async function unpairBluetooth(mac) {
+    try {
+        showToast('Esquecendo dispositivo...');
+        const data = await window.fifotv.btUnpair(mac);
+        if (data.ok) {
+            showToast('Dispositivo esquecido');
+            loadBluetoothSection();
+        } else {
+            showToast('Falha: ' + (data.error || 'Desconhecido'));
+        }
+    } catch (e) {
+        showToast('Erro ao esquecer');
     }
 }
 
@@ -1155,6 +1173,21 @@ function renderCacheList() {
 
 async function clearSiteCache(url) {
     showToast('Cache limpo');
+}
+
+async function updateApp() {
+    showToast('Atualizando...');
+    try {
+        const data = await window.fifotv.updateApp();
+        if (data.ok) {
+            showToast('Atualização concluída! Reiniciando...');
+            setTimeout(() => window.fifotv.restartApp(), 2000);
+        } else {
+            showToast('Falha: ' + (data.error || 'Erro desconhecido'));
+        }
+    } catch (e) {
+        showToast('Erro ao atualizar');
+    }
 }
 
 function showToast(message) {

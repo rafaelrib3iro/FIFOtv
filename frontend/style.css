@@ -1,3 +1,12 @@
+/* ─── Custom Cursor ─────────────────────────────────────── */
+*, *::before, *::after {
+    cursor: url('./assets/cursors/tv-dot.png') 16 16, none !important;
+}
+.pill, .streaming-item, button, a, [role="button"], [tabindex="0"],
+.btn-icon, .settings-menu-item, .settings-section {
+    cursor: url('./assets/cursors/tv-dot-hover.png') 16 16, none !important;
+}
+
 @font-face {
     font-family: 'Poppins';
     src: url('assets/fonts/Poppins/Poppins-200.woff2') format('woff2');

@@ -108,10 +108,20 @@ ipcMain.handle('system:restart', () => {
 
 ipcMain.handle('system:update', () => {
   const scriptPath = path.join(__dirname, '..', 'scripts', 'update.sh');
-  if (fs.existsSync(scriptPath)) {
-    exec(`bash "${scriptPath}"`, { timeout: 60000 });
+  if (!fs.existsSync(scriptPath)) {
+    return { ok: false, error: 'Script de atualização não encontrado' };
   }
-  return { ok: true, output: 'Atualização iniciada' };
+  return new Promise((resolve) => {
+    exec(`bash "${scriptPath}"`, { timeout: 180000 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error('[Update] failed:', err.message);
+        resolve({ ok: false, error: stderr || err.message });
+      } else {
+        console.log('[Update] success:', stdout);
+        resolve({ ok: true, output: stdout });
+      }
+    });
+  });
 });
 
 ipcMain.handle('system:stats', async () => {
@@ -238,19 +248,97 @@ ipcMain.handle('wifi:connect', async (_, ssid, password) => {
 });
 
 // ─── BLUETOOTH (dbus-next) ─────────────────────────────────
+const dbusNext = require('dbus-next');
+const { Interface: DbusInterface, DBusError } = dbusNext.interface;
+
 let btAdapter = null;
+let btAgentRegistered = false;
+
+function btSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function waitForBtProperty(bus, devicePath, iface, prop, expected, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const obj = await bus.getProxyObject('org.bluez', devicePath);
+      const props = obj.getInterface('org.freedesktop.DBus.Properties');
+      const val = await props.Get(iface, prop);
+      if (val.value === expected) return true;
+    } catch {}
+    await btSleep(500);
+  }
+  return false;
+}
+
+// ─── PAIRING AGENT ─────────────────────────────────────────
+class BluezAgent extends DbusInterface {
+  constructor(name) { super(name); }
+  Release() { console.log('[BT] Agent: Released'); }
+  AuthorizeService(device, uuid) {}
+  RequestPinCode(device) { throw new DBusError('org.bluez.Error.Rejected', 'not supported'); }
+  RequestPasskey(device) { return 0; }
+  DisplayPasskey(device, passkey, entered) {}
+  DisplayPinCode(device, pincode) {}
+  RequestConfirmation(device, passkey) { console.log('[BT] Agent: RequestConfirmation passkey=' + passkey); }
+  RequestAuthorization(device) {}
+  Cancel() { console.log('[BT] Agent: Cancel'); }
+}
+
+BluezAgent.configureMembers({
+  methods: {
+    Release:              { inSignature: '',  outSignature: '' },
+    AuthorizeService:     { inSignature: 'os', outSignature: '' },
+    RequestPinCode:       { inSignature: 'o',  outSignature: 's' },
+    RequestPasskey:       { inSignature: 'o',  outSignature: 'u' },
+    DisplayPasskey:       { inSignature: 'ouq', outSignature: '' },
+    DisplayPinCode:       { inSignature: 'os', outSignature: '' },
+    RequestConfirmation:  { inSignature: 'ou', outSignature: '' },
+    RequestAuthorization: { inSignature: 'o',  outSignature: '' },
+    Cancel:               { inSignature: '',  outSignature: '' },
+  }
+});
+
+async function registerBtAgent(bus) {
+  if (btAgentRegistered) return;
+  try {
+    const agent = new BluezAgent('org.bluez.Agent1');
+    bus.export('/org/fifotv/agent', agent);
+    const obj = await bus.getProxyObject('org.bluez', '/org/bluez');
+    const agentMgr = obj.getInterface('org.bluez.AgentManager1');
+    await agentMgr.RegisterAgent('/org/fifotv/agent', 'NoInputNoOutput');
+    await agentMgr.RequestDefaultAgent('/org/fifotv/agent');
+    btAgentRegistered = true;
+    console.log('[BT] Agent registered');
+  } catch (err) {
+    console.error('[BT] Agent registration failed:', err.message);
+  }
+}
+
+async function findDevicePath(bus, mac) {
+  const managed = await (await bus.getProxyObject('org.bluez', '/'))
+    .getInterface('org.freedesktop.DBus.ObjectManager').GetManagedObjects();
+  for (const [path, interfaces] of Object.entries(managed)) {
+    if (interfaces['org.bluez.Device1']) {
+      const d = interfaces['org.bluez.Device1'];
+      if (d['Address'] && d['Address'].value === mac) {
+        return path;
+      }
+    }
+  }
+  return null;
+}
 
 async function getBtAdapter() {
   if (btAdapter) return btAdapter;
   try {
-    const dbus = require('dbus-next');
-    const systemBus = dbus.systemBus();
+    const systemBus = dbusNext.systemBus();
     const obj = await systemBus.getProxyObject('org.bluez', '/');
     const mgr = obj.getInterface('org.freedesktop.DBus.ObjectManager');
     const managed = await mgr.GetManagedObjects();
     for (const [path, interfaces] of Object.entries(managed)) {
       if (interfaces['org.bluez.Adapter1']) {
         btAdapter = { path, bus: systemBus };
+        await registerBtAgent(systemBus);
         return btAdapter;
       }
     }
@@ -297,12 +385,16 @@ ipcMain.handle('bt:scan', async () => {
     const adapter = await getBtAdapter();
     if (!adapter) return { devices: [] };
     const obj = await adapter.bus.getProxyObject('org.bluez', adapter.path);
-    const dev = obj.getInterface('org.bluez.Adapter1');
+    const adapterIface = obj.getInterface('org.bluez.Adapter1');
+    const props = obj.getInterface('org.freedesktop.DBus.Properties');
 
-    try { await dev.StopDiscovery(); } catch {}
+    try { await adapterIface.StopDiscovery(); } catch {}
 
-    await dev.StartDiscovery();
-    await new Promise(r => setTimeout(r, 3000));
+    await props.Set('org.bluez.Adapter1', 'Pairable', true);
+    await props.Set('org.bluez.Adapter1', 'Discoverable', true);
+
+    await adapterIface.StartDiscovery();
+    await btSleep(3000);
 
     const managed = await (await adapter.bus.getProxyObject('org.bluez', '/'))
       .getInterface('org.freedesktop.DBus.ObjectManager').GetManagedObjects();
@@ -317,7 +409,7 @@ ipcMain.handle('bt:scan', async () => {
       }
     }
 
-    try { await dev.StopDiscovery(); } catch {}
+    try { await adapterIface.StopDiscovery(); } catch {}
 
     return { devices };
   } catch (err) {
@@ -330,22 +422,43 @@ ipcMain.handle('bt:connect', async (_, mac) => {
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { ok: false, error: 'No adapter' };
-    const managed = await (await adapter.bus.getProxyObject('org.bluez', '/'))
-      .getInterface('org.freedesktop.DBus.ObjectManager').GetManagedObjects();
-    for (const [path, interfaces] of Object.entries(managed)) {
-      if (interfaces['org.bluez.Device1']) {
-        const d = interfaces['org.bluez.Device1'];
-        if (d['Address'] && d['Address'].value === mac) {
-          const obj = await adapter.bus.getProxyObject('org.bluez', path);
-          const dev = obj.getInterface('org.bluez.Device1');
-          await dev.Connect();
-          return { ok: true };
+
+    const devicePath = await findDevicePath(adapter.bus, mac);
+    if (!devicePath) return { ok: false, error: 'Device not found' };
+
+    const obj = await adapter.bus.getProxyObject('org.bluez', devicePath);
+    const dev = obj.getInterface('org.bluez.Device1');
+    const props = obj.getInterface('org.freedesktop.DBus.Properties');
+
+    const connected = await props.Get('org.bluez.Device1', 'Connected');
+    if (connected.value) return { ok: true };
+
+    const paired = await props.Get('org.bluez.Device1', 'Paired');
+    if (!paired.value) {
+      try { await dev.Pair(); } catch (e) {
+        if (!e.type || !e.type.includes('AlreadyExists')) {
+          console.error('[BT] Pair failed:', e.type || e.message, e.text || '');
         }
       }
+      const pairedOk = await waitForBtProperty(adapter.bus, devicePath, 'org.bluez.Device1', 'Paired', true);
+      if (!pairedOk) return { ok: false, error: 'Pairing timeout' };
     }
-    return { ok: false, error: 'Device not found' };
+
+    await props.Set('org.bluez.Device1', 'Trusted', true);
+
+    try { await dev.Connect(); } catch (e) {
+      if (!e.type || !e.type.includes('AlreadyConnected')) {
+        return { ok: false, error: e.text || e.message };
+      }
+    }
+
+    const connectedOk = await waitForBtProperty(adapter.bus, devicePath, 'org.bluez.Device1', 'Connected', true);
+    if (!connectedOk) return { ok: false, error: 'Connection timeout' };
+
+    return { ok: true };
   } catch (e) {
-    return { ok: false, error: e.message };
+    console.error('[BT] bt:connect failed:', e.type || e.message);
+    return { ok: false, error: e.text || e.message };
   }
 });
 
@@ -353,23 +466,36 @@ ipcMain.handle('bt:disconnect', async (_, mac) => {
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { ok: false };
-    const managed = await (await adapter.bus.getProxyObject('org.bluez', '/'))
-      .getInterface('org.freedesktop.DBus.ObjectManager').GetManagedObjects();
-    for (const [path, interfaces] of Object.entries(managed)) {
-      if (interfaces['org.bluez.Device1']) {
-        const d = interfaces['org.bluez.Device1'];
-        if (d['Address'] && d['Address'].value === mac) {
-          const obj = await adapter.bus.getProxyObject('org.bluez', path);
-          const dev = obj.getInterface('org.bluez.Device1');
-          await dev.Disconnect();
-          return { ok: true };
-        }
-      }
-    }
-    return { ok: false };
+
+    const devicePath = await findDevicePath(adapter.bus, mac);
+    if (!devicePath) return { ok: false };
+
+    const obj = await adapter.bus.getProxyObject('org.bluez', devicePath);
+    const dev = obj.getInterface('org.bluez.Device1');
+    await dev.Disconnect();
+    return { ok: true };
   } catch (err) {
     console.error('[BT] bt:disconnect failed:', err.message);
     return { ok: false };
+  }
+});
+
+ipcMain.handle('bt:unpair', async (_, mac) => {
+  try {
+    const adapter = await getBtAdapter();
+    if (!adapter) return { ok: false, error: 'No adapter' };
+
+    const devicePath = await findDevicePath(adapter.bus, mac);
+    if (!devicePath) return { ok: false, error: 'Device not found' };
+
+    const obj = await adapter.bus.getProxyObject('org.bluez', adapter.path);
+    const adapterIface = obj.getInterface('org.bluez.Adapter1');
+    await adapterIface.RemoveDevice(devicePath);
+    console.log('[BT] Unpaired:', mac);
+    return { ok: true };
+  } catch (e) {
+    console.error('[BT] bt:unpair failed:', e.type || e.message);
+    return { ok: false, error: e.text || e.message };
   }
 });
 
@@ -451,6 +577,39 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
 
   // Inject streaming customizations after dom-ready
   streamingView.webContents.on('dom-ready', () => {
+    // Inject custom cursor (base64 data URIs to bypass CSP on streaming sites)
+    const cursorDot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqBhUVJBkc4ui0AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA2LTIxVDIxOjM2OjI1KzAwOjAwIfwVgwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNi0yMVQyMTozNjoyNSswMDowMFChrT8AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDYtMjFUMjE6MzY6MjUrMDA6MDAHtIzgAAACGUlEQVRYw+2XPU/DMBCGHzekJKhUQnxJQNXObEwMTAz8agYmBqb+BaoCUkEIqVR8VcEsl+h02LRFiDDg5Rz3cu9zPn+k8N9qbm4RZ+89QApkQA40gQQogDfgGXgBps7NF3ouLxFeATYX4L0DnmaBzATw3qfAtmS6aCuAkXNu+i0A730ObJnhBGgD62KbMv1j4F5sYd65dc49LwQQEHfADtCZI/MhcAP4WRBBAJn2HTW0DBx8owR94FU939hyfAKQBbenah4SbwFdmY0WMJGsB9KPQRTAlV6YIQC92h1wqH5OBKb3RdaXIqrXwYUqx51z7ikIINl31dCuqnkCnEjGDdkZHWAVeJQZGAHvMgunCmIIXKu4g3IWGoY+NdnqBXcg4hlwDOyLOGL3ZTwTP122jtnGlY4FyFS/bWreE/8jBdgC1sSWAkfi15PxULwsBpCr/rrql2XZVuJtlUkqz4nx60biVToWoBkh7hibE255xN/Gq3QsQBJyUlNZ1jwl3FLj14rEq3QsgN46b6pf7u1HsbGzfWr8JpF4lY4F0E5j1R8aGzzX1bj1t/EqnUYkAHKxlG0gdqQyGKuMp+YSGpn3bLxKxwK8RIgncsK9A+cKYgI8iC3Fz8Xv0pRgHNJZitSwFBiqldwHNqR/NsdJ2DclLEI6f+su4C/chtT9PaAg6vsi+gKCX/smNOWo56tYQVDb/4IAyI/+M/pvH1xY0SKRcHRhAAAAAElFTkSuQmCC';
+    const cursorHover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqBhUVJCBD52C8AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA2LTIxVDIxOjM2OjMyKzAwOjAwKPErkwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNi0yMVQyMTozNjozMiswMDowMFmsky8AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDYtMjFUMjE6MzY6MzIrMDA6MDAOubLwAAACf0lEQVRYw+WXwU9TQRDGf/ugtZQgbaGCJcHECImJ8e4Br/7NXuXg3ZiYIDGRBLS2haLpA1voeuhs/BhbYpGkJO5lZ97O7nzz7ezsPvjfW5jGOMYYgCKwCJSBEpABQ+AcyIEe0A8hxFsDEGPMgAqwOgXeNtANIQz/CUCMcQl4eHOS+RJC+DE1AKN7DbjvhopAzdhYNr0PnFrUx6Zr+w40x21LuMb5hu1zaiXgCVD/i6hbwL7lRWo5cOhBTAKw7iJfB57egP4PwFdlIoSg+p8Axuz5I+Cxm1MFNoGGsZQDR8ABcAJolJ+Az6JfyYngnGdG86TIl4AdtzW+5cAuoInnmdhPp8MDqMlRKwEvZPgB8NLkguXCGrAAnAFN2/uB2bwBvsn8t5IT7RDC8RUAlnhbMuGZJNwS8MrkVWD7Ggb27DQAvBYmWsB7sfsYQoiZfCg6OTkPRrt3PmcspYo4Z9+3hcUdCbI+xgcKYFHkmshVc1IQ50XgnszPTC8KiILNq05Yd9ED0MTSkrspEaTI5yNwmMO77qi3tJ8XJupuvl+37AGURF4WuWH9mvUFgKMcOlbvOv2RruNi35C1Kt6fApiUD4mZBbXruGIreubsldmCyJl3qreWLp9iO1O7FYV4VR86+1zMBiIPPQCt26ciH1nf1EUa5d9OV4oj3TlpuvkAXe9PASjStsgH1resvwQuArBRhueVUW9n7cLG1f5gwrq5B9AT+VjkEzMeWJFJW/RT6B6anrZuz+xzmz9u3Z4H0HdyiiBabU8RJBCX8gw7l8i1Eu7KxdQa4+MO3QXchduQWb8HBMTsXkTchTchs34VOyCz+S9wIGb3Z+SA3Pq/4czbL8CzCDfzoDluAAAAAElFTkSuQmCC';
+    streamingView.webContents.insertCSS(`
+      *, *::before, *::after {
+        cursor: url('${cursorDot}') 16 16, none !important;
+      }
+      .ytp-progress-bar, .ytp-chrome-bottom, .ytp-chrome-top,
+      button, a, [role="button"], [tabindex="0"], input, select, textarea {
+        cursor: url('${cursorHover}') 16 16, none !important;
+      }
+    `).catch(() => {});
+
+    // Inject cursor idle tracking
+    streamingView.webContents.executeJavaScript(`
+      (function() {
+        let idleTimer = null;
+        function resetIdle() {
+          document.documentElement.classList.remove('fifotv-cursor-idle');
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            document.documentElement.classList.add('fifotv-cursor-idle');
+          }, 3000);
+        }
+        document.addEventListener('mousemove', resetIdle, { passive: true });
+        resetIdle();
+      })();
+    `).catch(() => {});
+    streamingView.webContents.insertCSS(`
+      .fifotv-cursor-idle, .fifotv-cursor-idle *, .fifotv-cursor-idle *::before, .fifotv-cursor-idle *::after {
+        cursor: none !important;
+      }
+    `).catch(() => {});
     // Inject spatial-navigation blocker: when overlay menu is open, block arrow keys
     // from reaching spatial navigation (they go to overlay's D-pad handler instead)
     streamingView.webContents.executeJavaScript(`
@@ -512,8 +671,8 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   overlayView.setBounds({ x: 0, y: 0, width, height });
   overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
 
-  // Z-order: homeView (bottom), overlayView (behind streaming), streamingView (top, receives mouse)
-  addView(overlayView);
+  // Z-order: homeView (bottom), streamingView (top, receives mouse)
+  // overlay is NOT added here — it's added/removed dynamically via IPC handlers
   addView(streamingView);
   addView(loadingView);
 
@@ -635,31 +794,35 @@ ipcMain.on('overlay:menu-visibility', (_, visible) => {
 });
 
 // Z-order management: bring overlay to front when menu opens, send back when it closes
+// Overlay: add to hierarchy (appears on top of streaming)
 ipcMain.on('overlay:show-menu', () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  win.contentView.removeChildView(overlayView);
-  win.contentView.addChildView(overlayView); // overlay goes to top
-  overlayView.webContents.focus(); // focus AFTER z-order so it actually receives keys
+  win.contentView.addChildView(overlayView);
+  overlayView.webContents.focus();
 });
 
+// Overlay: remove from hierarchy (streaming regains full control)
 ipcMain.on('overlay:hide-menu', () => {
-  if (!streamingView || streamingView.webContents.isDestroyed() || !win) return;
-  win.contentView.removeChildView(streamingView);
-  win.contentView.addChildView(streamingView); // streaming goes back to top
-  streamingView.webContents.focus(); // focus AFTER z-order
+  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
+  try { win.contentView.removeChildView(overlayView); } catch {}
+  if (streamingView && !streamingView.webContents.isDestroyed()) {
+    streamingView.webContents.focus();
+  }
 });
 
-// Z-order for volume toast: no focus change, just z-order
+// Overlay: add to hierarchy for volume toast (purely visual, no focus change)
 ipcMain.on('overlay:toast-show', () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  win.contentView.removeChildView(overlayView);
-  win.contentView.addChildView(overlayView); // overlay goes to top
+  win.contentView.addChildView(overlayView);
 });
 
+// Overlay: remove from hierarchy after volume toast + focus streaming
 ipcMain.on('overlay:toast-hide', () => {
-  if (!streamingView || streamingView.webContents.isDestroyed() || !win) return;
-  win.contentView.removeChildView(streamingView);
-  win.contentView.addChildView(streamingView); // streaming goes back to top
+  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
+  try { win.contentView.removeChildView(overlayView); } catch {}
+  if (streamingView && !streamingView.webContents.isDestroyed()) {
+    streamingView.webContents.focus();
+  }
 });
 
 // ─── REMOTE ACCESS (opencode serve) ────────────────────────
@@ -779,6 +942,29 @@ app.whenReady().then(async () => {
     const { width: w, height: h } = getViewBounds();
     homeView.setBounds({ x: 0, y: 0, width: w, height: h });
     homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+
+    // Cursor idle timer for homeView
+    homeView.webContents.on('dom-ready', () => {
+      homeView.webContents.executeJavaScript(`
+        (function() {
+          let idleTimer = null;
+          function resetIdle() {
+            document.documentElement.classList.remove('fifotv-cursor-idle');
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+              document.documentElement.classList.add('fifotv-cursor-idle');
+            }, 3000);
+          }
+          document.addEventListener('mousemove', resetIdle, { passive: true });
+          resetIdle();
+        })();
+      `).catch(() => {});
+      homeView.webContents.insertCSS(`
+        .fifotv-cursor-idle, .fifotv-cursor-idle *, .fifotv-cursor-idle *::before, .fifotv-cursor-idle *::after {
+          cursor: none !important;
+        }
+      `).catch(() => {});
+    });
 
     homeView.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;

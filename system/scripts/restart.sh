@@ -9,8 +9,7 @@ PROJECT_DIR="/home/tv/smarttv"
 pkill -f '/usr/lib/chromium/chromium ' 2>/dev/null
 sleep 1
 
-# 2. Show splash logo on root window + hide cursor
-DISPLAY=:0 unclutter -idle 0 &
+# 2. Show splash logo on root window
 DISPLAY=:0 feh --bg-scale /home/tv/smarttv/frontend/assets/splash-bg.png &
 
 # 2. Kill Flask (SIGTERM primeiro, SIGKILL fallback)

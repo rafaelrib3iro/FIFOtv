@@ -76,8 +76,6 @@ xset s off
 xset -dpms
 xset s noblank
 
-unclutter -idle 0 &
-
 feh --bg-scale /home/tv/smarttv/frontend/assets/splash-bg.png &
 
 /home/tv/smarttv/system/scripts/bluetooth-watch.sh &
