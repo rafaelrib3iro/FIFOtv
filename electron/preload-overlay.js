@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('fifotv', {
   bringOverlayToFront: () => ipcRenderer.send('overlay:show-menu'),
   sendOverlayToBack: () => ipcRenderer.send('overlay:hide-menu'),
 
+  // Z-order for volume toast (no focus change)
+  showToastOverlay: () => ipcRenderer.send('overlay:toast-show'),
+  hideToastOverlay: () => ipcRenderer.send('overlay:toast-hide'),
+
   // Eventos do main process
   onKey: (cb) => ipcRenderer.on('key-event', (_, input) => cb(input)),
   onShowMenu: (cb) => ipcRenderer.on('show-menu', (_, data) => cb(data)),

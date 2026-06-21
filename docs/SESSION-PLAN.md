@@ -422,12 +422,13 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 - Git e Node.js 22 já instalados (do v1)
 
 **O que acontece:**
-1. No all-in-one: rodar `bash update.sh` (faz pull, npm install, configura systemd, reinicia)
-2. OU pedir pra IA: "Lê `docs/DEPLOY-V2.md` e executa todos os passos"
-3. Após reboot, FIFOtv v2 inicia automaticamente via systemd
-4. Testar: air mouse, D-pad, Bluetooth real, Wi-Fi real, volume real, streaming na TV
-5. Corrigir bugs de hardware
-6. Push das correções
+1. Revisar scripts de deploy: `setup.sh` (remover dependências v1 como Flask, Openbox, Chromium), `update.sh` (adicionar reinstalação do service + instalação de pacotes faltantes), `deploy.sh` (remover referências v1)
+2. No all-in-one: rodar `bash update.sh` (faz pull, npm install, instala pacotes, reinstala service, reinicia)
+3. OU pedir pra IA: "Lê `docs/DEPLOY-V2.md` e executa todos os passos"
+4. Após reboot, FIFOtv v2 inicia automaticamente via systemd
+5. Testar: air mouse, D-pad, Bluetooth real, Wi-Fi real, volume real, streaming na TV
+6. Corrigir bugs de hardware
+7. Push das correções
 
 **Comandos úteis no all-in-one:**
 ```bash

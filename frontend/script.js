@@ -21,7 +21,6 @@ const ICON = {
     download: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
     volumeUp: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>',
     volumeDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>',
-    extensions: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
     infoCircle: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
 };
 
@@ -764,7 +763,6 @@ function showSettingsPopup() {
         { id: 'streamings', icon: ICON.tv, label: 'Streamings' },
         { id: 'wifi', icon: ICON.wifi, label: 'Wi-Fi' },
         { id: 'bluetooth', icon: ICON.bluetooth, label: 'Bluetooth' },
-        { id: 'extensions', icon: ICON.extensions, label: 'Extensões' },
         { id: 'system', icon: ICON.monitor, label: 'Sistema' },
         { id: 'remote', icon: ICON.globe, label: 'Acesso Remoto' },
         { id: 'cache', icon: ICON.trash, label: 'Dados e Cache' }
@@ -801,16 +799,6 @@ function showSettingsPopup() {
                 </div>
                 <div class="info-label" style="margin-bottom:8px;">Dispositivos pareados:</div>
                 <div id="bt-list"></div>
-            </div>
-            <div class="settings-section ${settingsSection === 'extensions' ? 'active' : ''}" id="section-extensions">
-                <div class="settings-section-title">Extensões do Chromium</div>
-                <div id="extensions-list"></div>
-                <div style="margin-top:16px;padding:14px 18px;border-radius:28px;background:rgba(255,255,255,0.04);border:1px solid var(--pill-border);">
-                    <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
-                        As extensões são instaladas manualmente no Chromium.
-                        Para instalar, acesse chrome://extensions e arraste o .crx ou use o Chrome Web Store.
-                    </div>
-                </div>
             </div>
             <div class="settings-section ${settingsSection === 'system' ? 'active' : ''}" id="section-system">
                 <div class="settings-section-title">Sistema</div>
@@ -871,7 +859,6 @@ function showSettingsPopup() {
                 // Re-render content for the new section
                 if (newSection === 'streamings') renderStreamingsList();
                 if (newSection === 'cache') renderCacheList();
-                if (newSection === 'extensions') renderExtensionsList();
                 if (newSection === 'remote') loadRemoteStatus();
                 if (newSection === 'wifi') loadWifiSection();
                 if (newSection === 'bluetooth') loadBluetoothSection();
@@ -890,7 +877,6 @@ function showSettingsPopup() {
 
     renderStreamingsList();
     loadRemoteStatus();
-    renderExtensionsList();
     renderCacheList();
     if (settingsSection === 'wifi') loadWifiSection();
     if (settingsSection === 'bluetooth') loadBluetoothSection();
@@ -1094,46 +1080,6 @@ async function updateBluetoothPill() {
             pillEl.style.opacity = '0.5';
         }
     } catch (e) {}
-}
-
-const DEFAULT_EXTENSIONS = [
-    { id: 'ublock', name: 'uBlock Origin', description: 'Bloqueador de anúncios e rastreadores', enabled: true, chromeWebStore: 'https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm' },
-    { id: 'useragent', name: 'User-Agent Switcher', description: 'Alterar user-agent do navegador', enabled: true, chromeWebStore: 'https://chromewebstore.google.com/detail/user-agent-switcher/djflhoibgkdhkhhceddaikdcjkeeghap' },
-    { id: 'darkreader', name: 'Dark Reader', description: 'Modo escuro para todos os sites', enabled: false, chromeWebStore: 'https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbilikoochkdfhmkabmhp' },
-    { id: 'cookiebanner', name: 'I don\'t care about cookies', description: 'Remove banners de cookies automaticamente', enabled: true, chromeWebStore: 'https://chromewebstore.google.com/detail/i-dont-care-about-cookies/fihnjjcciaagnneidjpemknedcpoltli' },
-    { id: 'sponsorblock', name: 'SponsorBlock', description: 'Pula sponsors em vídeos do YouTube', enabled: false, chromeWebStore: 'https://chromewebstore.google.com/detail/sponsorblock-for-youtube/mbmabfcaoonfknkikocioebjjdbgfjab' },
-];
-
-function renderExtensionsList() {
-    const list = document.getElementById('extensions-list');
-    if (!list) return;
-    list.innerHTML = DEFAULT_EXTENSIONS.map(ext => `
-        <div class="streaming-item" style="cursor:default;">
-            <div class="streaming-item-icon" style="background:${ext.enabled ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${ext.enabled ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};">
-                ${ICON.extensions}
-            </div>
-            <div class="streaming-item-info">
-                <div class="streaming-item-name">${ext.name}</div>
-                <div class="streaming-item-url">${ext.description}</div>
-            </div>
-            <div class="streaming-item-actions">
-                <button class="btn-icon" title="${ext.enabled ? 'Desativar' : 'Ativar'}" onclick="toggleExtension('${ext.id}')" style="color:${ext.enabled ? '#4ade80' : 'var(--text-secondary)'};">
-                    ${ext.enabled ? ICON.monitor : ICON.x}
-                </button>
-                <a href="${ext.chromeWebStore}" target="_blank" class="btn-icon" title="Chrome Web Store" style="text-decoration:none;color:var(--text-secondary);">
-                    ${ICON.globe}
-                </a>
-            </div>
-        </div>
-    `).join('');
-}
-
-function toggleExtension(id) {
-    const ext = DEFAULT_EXTENSIONS.find(e => e.id === id);
-    if (ext) {
-        ext.enabled = !ext.enabled;
-        renderExtensionsList();
-    }
 }
 
 function renderStreamingsList() {

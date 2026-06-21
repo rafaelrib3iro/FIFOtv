@@ -243,8 +243,8 @@ let btAdapter = null;
 async function getBtAdapter() {
   if (btAdapter) return btAdapter;
   try {
-    const { bus } = require('dbus-next');
-    const systemBus = bus.system();
+    const dbus = require('dbus-next');
+    const systemBus = dbus.systemBus();
     const obj = await systemBus.getProxyObject('org.bluez', '/');
     const mgr = obj.getInterface('org.freedesktop.DBus.ObjectManager');
     const managed = await mgr.GetManagedObjects();
@@ -254,7 +254,8 @@ async function getBtAdapter() {
         return btAdapter;
       }
     }
-  } catch {
+  } catch (err) {
+    console.error('[BT] getBtAdapter failed:', err.message);
     btAdapter = null;
   }
   return btAdapter;
@@ -285,7 +286,8 @@ ipcMain.handle('bt:status', async () => {
       }
     }
     return { connected: false, name: '', mac: '' };
-  } catch {
+  } catch (err) {
+    console.error('[BT] bt:status failed:', err.message);
     return { connected: false, name: '', mac: '' };
   }
 });
@@ -296,8 +298,10 @@ ipcMain.handle('bt:scan', async () => {
     if (!adapter) return { devices: [] };
     const obj = await adapter.bus.getProxyObject('org.bluez', adapter.path);
     const dev = obj.getInterface('org.bluez.Adapter1');
-    await dev.StartDiscovery();
 
+    try { await dev.StopDiscovery(); } catch {}
+
+    await dev.StartDiscovery();
     await new Promise(r => setTimeout(r, 3000));
 
     const managed = await (await adapter.bus.getProxyObject('org.bluez', '/'))
@@ -312,8 +316,12 @@ ipcMain.handle('bt:scan', async () => {
         });
       }
     }
+
+    try { await dev.StopDiscovery(); } catch {}
+
     return { devices };
-  } catch {
+  } catch (err) {
+    console.error('[BT] bt:scan failed:', err.message);
     return { devices: [] };
   }
 });
@@ -359,7 +367,8 @@ ipcMain.handle('bt:disconnect', async (_, mac) => {
       }
     }
     return { ok: false };
-  } catch {
+  } catch (err) {
+    console.error('[BT] bt:disconnect failed:', err.message);
     return { ok: false };
   }
 });
@@ -638,6 +647,19 @@ ipcMain.on('overlay:hide-menu', () => {
   win.contentView.removeChildView(streamingView);
   win.contentView.addChildView(streamingView); // streaming goes back to top
   streamingView.webContents.focus(); // focus AFTER z-order
+});
+
+// Z-order for volume toast: no focus change, just z-order
+ipcMain.on('overlay:toast-show', () => {
+  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
+  win.contentView.removeChildView(overlayView);
+  win.contentView.addChildView(overlayView); // overlay goes to top
+});
+
+ipcMain.on('overlay:toast-hide', () => {
+  if (!streamingView || streamingView.webContents.isDestroyed() || !win) return;
+  win.contentView.removeChildView(streamingView);
+  win.contentView.addChildView(streamingView); // streaming goes back to top
 });
 
 // ─── REMOTE ACCESS (opencode serve) ────────────────────────

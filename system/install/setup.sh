@@ -50,7 +50,7 @@ ok "PipeWire instalado"
 
 # ─── 5. BLUETOOTH ──────────────────────────────────────
 log "Instalando Bluetooth..."
-apt-get install -y -qq bluez bluez-tools
+apt-get install -y -qq bluez bluez-tools libspa-0.2-bluetooth
 ok "Bluetooth instalado"
 
 # ─── 6. WI-FI ──────────────────────────────────────────

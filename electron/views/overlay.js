@@ -18,6 +18,7 @@
   let currentZoom = 100;
   let menuVisible = false;
   let menuFocusIndex = -1;
+  let toastVisible = false;
 
   // Menu items: 'home', 'reload', 'zoom-bar', 'vol-bar', 'monitor', 'settings', 'shutdown'
   // Volume bar and zoom bar are single focusable items (D-pad left/right adjusts them)
@@ -28,6 +29,8 @@
   let volToastTimer = null;
 
   function showVolumeToast() {
+    toastVisible = true;
+
     if (!volToastEl) {
       volToastEl = document.createElement('div');
       volToastEl.id = 'fifotv-volume-toast';
@@ -45,11 +48,22 @@
       if (fill) fill.style.width = currentVolume + '%';
       volToastEl.classList.remove('fifotv-fade-out');
     }
+
+    // Bring overlay to front so toast is visible over streaming
+    if (window.fifotv && window.fifotv.showToastOverlay) {
+      window.fifotv.showToastOverlay();
+    }
+
     clearTimeout(volToastTimer);
     volToastTimer = setTimeout(() => {
       if (volToastEl) {
         volToastEl.classList.add('fifotv-fade-out');
         setTimeout(() => { if (volToastEl) { volToastEl.remove(); volToastEl = null; } }, 250);
+      }
+      toastVisible = false;
+      // Send overlay back only if menu is not open
+      if (!menuVisible && window.fifotv && window.fifotv.hideToastOverlay) {
+        window.fifotv.hideToastOverlay();
       }
     }, 2000);
   }
@@ -248,7 +262,10 @@
     if (window.fifotv && window.fifotv.setMouseEvents) window.fifotv.setMouseEvents(true);
     if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
     if (window.fifotv && window.fifotv.setMenuVisibility) window.fifotv.setMenuVisibility(false);
-    if (window.fifotv && window.fifotv.sendOverlayToBack) window.fifotv.sendOverlayToBack();
+    // Send overlay back only if toast is not visible
+    if (!toastVisible && window.fifotv && window.fifotv.sendOverlayToBack) {
+      window.fifotv.sendOverlayToBack();
+    }
   }
 
   function toggleMenu(x, y) {
