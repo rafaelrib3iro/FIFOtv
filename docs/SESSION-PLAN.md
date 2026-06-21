@@ -3,8 +3,8 @@
 ## Visão Geral
 
 ```
-Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 6 → Sessão 7 → Sessão 8
-  setup         serviços      streaming    controles    TV custom      fixes       teste+push  deploy     iso+inst    merge+tag
+Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 5.5 → Sessão 6 → Sessão 7 → Sessão 8
+  setup         serviços      streaming    controles    TV custom      fixes       teste+push  hw fixes   deploy     iso+inst    merge+tag
 ```
 
 > **Regra de ouro:** `main` nunca quebra. `electron` é o laboratório. Só une quando está pronto.
@@ -384,6 +384,32 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 - Botão "Ativar Acesso Remoto" não funcionava — nunca foi implementado na v2. Fix: IPC handlers `remote:status`/`remote:toggle` controlando `opencode serve`
 
 **Entregável:** Branch `electron` no GitHub com código testado e rodando no all-in-one.
+
+---
+
+## Sessão 5.5 — Fix de Bugs no Hardware Real
+
+**Objetivo:** Testar o v2 no all-in-one (Positivo Union UD3630), identificar e corrigir bugs encontrados.
+
+**Fluxo de trabalho:**
+1. Usuário testa funcionalidade no all-in-one
+2. Usuário reporta bug pra IA (ou diretamente ou via prompt)
+3. IA adiciona o bug em `docs/BUGS.md`
+4. IA diagnostica o bug via SSH + leitura de código
+5. IA corrige o bug, commita e faz push
+6. Usuário atualiza o all-in-one (`git pull && sudo systemctl restart fifotv`)
+7. Usuário verifica se o bug foi resolvido
+
+**Como reportar bugs:**
+> "Adiciona no BUGS.md: [descrição do bug]"
+
+**Como atualizar after fix:**
+> "Atualiza o all-in-one" (IA faz pull + restart via SSH)
+
+**Arquivos de referência:**
+- `docs/BUGS.md` — Lista de bugs e status
+
+**Entregável:** Todos os bugs reportados corrigidos e validados no hardware real.
 
 ---
 
