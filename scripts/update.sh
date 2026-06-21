@@ -74,7 +74,7 @@ XINITRC_CONTENT='#!/bin/bash
 xset s off
 xset -dpms
 xset s noblank
-wait'
+exec sleep infinity'
 
 if [ "$(cat /home/tv/.xinitrc 2>/dev/null)" != "$XINITRC_CONTENT" ]; then
   echo "$XINITRC_CONTENT" > /home/tv/.xinitrc

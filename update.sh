@@ -38,7 +38,7 @@ cat > /home/tv/.xinitrc << 'XINITRC'
 xset s off
 xset -dpms
 xset s noblank
-wait
+exec sleep infinity
 XINITRC
 chmod +x /home/tv/.xinitrc
 echo "  OK"
