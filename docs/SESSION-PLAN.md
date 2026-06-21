@@ -3,7 +3,7 @@
 ## Visão Geral
 
 ```
-Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 → Sessão 5 → Sessão 6 → Sessão 7 → Sessão 8
+Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 6 → Sessão 7 → Sessão 8
   setup         serviços      streaming    controles    TV custom      fixes       teste+push  deploy     iso+inst    merge+tag
 ```
 
@@ -356,28 +356,28 @@ Usuário clica em Netflix
 
 ---
 
-## Sessão 5 — Teste Completo + Push
+## Sessão 5 ✅ — Teste Completo + Push
 
 **Objetivo:** Tudo funcionando no Fedora, commit limpo, push pro GitHub.
 
-**O que acontece:**
-1. Testar TUDO no Fedora com `npm run dev`:
-   - [ ] Homepage abre e grid funciona
-   - [ ] Navegação com mouse/teclado funciona
-   - [ ] Clicar em streaming abre janela + overlay
-   - [ ] Menu contexto aparece (home e overlay)
-   - [ ] Volume sobe/desce/mute
-   - [ ] Configurações: Wi-Fi, Bluetooth, Info, Sistema
-   - [ ] "Voltar" do streaming volta pra homepage
-   - [ ] Screensaver funciona
-   - [ ] D-pad navega
-   - [ ] TV identity (streaming reconhece como Smart TV)
-2. Corrigir bugs encontrados
-3. `git add . && git commit -m "v2: Electron migration"`
-4. `git push origin electron`
-5. Gerar handoff pra sessão 6
+**O que foi feito:**
+1. Todos os 14 testes passaram (homepage, grid, streaming, overlay, volume, settings, screensaver, D-pad, TV identity, mouse, DRM)
+2. Todos os 9 fixes da Sessão 4.7 validados
+3. `update.sh` criado — script de migração v1→v2
+4. `system/fifotv.service` criado — service systemd pro boot automático
+5. `system/.xinitrc` atualizado — mínimo (só xset + unclutter)
+6. `docs/DEPLOY-V2.md` criado — documentação completa de deploy
+7. Commit `4800e55` — 42 arquivos, 4593 linhas
+8. Push pro GitHub (branch `electron`)
 
-**Entregável:** Branch `electron` com código testado e empurrado pro GitHub.
+**Commits:**
+```
+4800e55 v2: Electron migration complete
+15c9f3f docs: plano de migração v1->v2 (Electron)
+8bd2896 FIFOtv v1 - Smart TV kiosk (Chromium + Flask + Openbox)
+```
+
+**Entregável:** Branch `electron` no GitHub com código testado e pronto pra deploy.
 
 ---
 
@@ -385,14 +385,26 @@ Usuário clica em Netflix
 
 **Objetivo:** Rodar o v2 no hardware real (Positivo Union UD3630).
 
+**Pré-requisitos:**
+- All-in-one ligado e acessível via SSH (`tv@IP`, senha: `fifotv`)
+- Git e Node.js 22 já instalados (do v1)
+
 **O que acontece:**
-1. No all-in-one: `git checkout electron && git pull`
-2. Instalar Node.js no all-in-one (Debian 13)
-3. `npm install`
-4. `npm start` — testar na tela real
-5. Testar: air mouse, D-pad, Bluetooth real, Wi-Fi real, volume real, streaming na TV
-6. Corrigir bugs de hardware
-7. Push das correções
+1. No all-in-one: rodar `bash update.sh` (faz pull, npm install, configura systemd, reinicia)
+2. OU pedir pra IA: "Lê `docs/DEPLOY-V2.md` e executa todos os passos"
+3. Após reboot, FIFOtv v2 inicia automaticamente via systemd
+4. Testar: air mouse, D-pad, Bluetooth real, Wi-Fi real, volume real, streaming na TV
+5. Corrigir bugs de hardware
+6. Push das correções
+
+**Comandos úteis no all-in-one:**
+```bash
+sudo systemctl status fifotv    # Ver status
+journalctl -u fifotv -f         # Ver logs
+sudo systemctl restart fifotv   # Reiniciar
+```
+
+**Rollback:** Seguir seção "Rollback" em `docs/DEPLOY-V2.md` (volta pro branch `main`)
 
 **Entregável:** v2 rodando no all-in-one, todas as funcionalidades básicas funcionando.
 
