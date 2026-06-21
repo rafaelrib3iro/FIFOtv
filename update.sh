@@ -30,7 +30,7 @@ echo "[2/7] Instalando dependências npm..."
 npm install
 echo "  OK"
 
-# 4. Atualiza .xinitrc (só xset, sem Flask/Openbox/Chromium)
+# 4. Atualiza .xinitrc
 echo "[3/7] Atualizando .xinitrc..."
 cat > /home/tv/.xinitrc << 'XINITRC'
 #!/bin/bash
@@ -38,10 +38,17 @@ cat > /home/tv/.xinitrc << 'XINITRC'
 xset s off
 xset -dpms
 xset s noblank
+unclutter -idle 3 &
 exec sleep infinity
 XINITRC
 chmod +x /home/tv/.xinitrc
 echo "  OK"
+
+# 4b. Cursor theme
+echo "  Instalando cursor theme..."
+mkdir -p /home/tv/.local/share/icons/fifotv/cursors
+cp "$PROJ_DIR/system/cursors/fifotv/index.theme" /home/tv/.local/share/icons/fifotv/
+cp "$PROJ_DIR/system/cursors/fifotv/cursors/left_ptr" /home/tv/.local/share/icons/fifotv/cursors/
 
 # 5. Instala service do systemd
 echo "[4/7] Instalando service systemd..."

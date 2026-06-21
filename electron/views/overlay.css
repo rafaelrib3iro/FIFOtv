@@ -1,14 +1,6 @@
 /* FIFOtv Overlay — Context Menu, Volume Toast, Notifications */
 /* Adapted from frontend/extensions/tv-override/ui-overlay.css */
 
-*, *::before, *::after {
-    cursor: url('../../frontend/assets/cursors/tv-dot.png') 16 16, none !important;
-}
-.pill, .streaming-item, button, a, [role="button"], [tabindex="0"],
-.btn-icon, .settings-menu-item, .settings-section {
-    cursor: url('../../frontend/assets/cursors/tv-dot-hover.png') 16 16, none !important;
-}
-
 * {
     margin: 0;
     padding: 0;

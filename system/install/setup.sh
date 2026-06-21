@@ -69,7 +69,7 @@ ok "Flask instalado"
 
 # ─── 8. UTILITÁRIOS ────────────────────────────────────
 log "Instalando utilitários..."
-    apt-get install -y -qq xdotool curl wget
+    apt-get install -y -qq xdotool unclutter curl wget
 ok "Utilitários instalados"
 
 # ─── 9. SISTEMA ────────────────────────────────────────

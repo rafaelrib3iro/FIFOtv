@@ -597,7 +597,15 @@ function handleSettingsItemNav(e) {
             e.preventDefault();
             break;
         case 'Enter':
-            if (visibleItems[settingsItemIndex]) visibleItems[settingsItemIndex].click();
+            if (visibleItems[settingsItemIndex]) {
+                const el = visibleItems[settingsItemIndex];
+                if (el.classList.contains('streaming-item')) {
+                    const btn = el.querySelector('.btn-icon');
+                    if (btn) btn.click();
+                } else {
+                    el.click();
+                }
+            }
             e.preventDefault();
             break;
     }
@@ -988,7 +996,7 @@ async function loadBluetoothSection() {
         info.style.color = status.connected ? '#4ade80' : 'var(--text-secondary)';
         if (status.connected) {
             list.innerHTML = `
-                <div class="streaming-item" style="cursor:default;">
+                <div class="streaming-item" tabindex="0">
                     <div class="streaming-item-icon" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                         ${ICON.bluetooth}
                     </div>
@@ -1013,7 +1021,7 @@ async function loadBluetoothSection() {
             if (devices.length > 0) {
                 const divider = status.connected ? '<div style="color:var(--text-dim);font-size:12px;margin:12px 0 6px;">Dispositivos próximos:</div>' : '';
                 list.innerHTML += divider + devices.map(d => `
-                    <div class="streaming-item" style="cursor:default;">
+                    <div class="streaming-item" tabindex="0">
                         <div class="streaming-item-icon" style="background:rgba(255,255,255,0.06);border:1px solid var(--pill-border);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
                             ${ICON.bluetooth}
                         </div>

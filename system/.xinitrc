@@ -3,4 +3,5 @@
 xset s off
 xset -dpms
 xset s noblank
+unclutter -idle 3 &
 exec sleep infinity

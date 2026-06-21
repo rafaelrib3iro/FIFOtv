@@ -33,7 +33,7 @@ fi
 step "Verificando pacotes do sistema..."
 
 APT_PACKAGES=(
-  xorg xinit x11-xserver-utils
+  xorg xinit x11-xserver-utils unclutter
   nodejs npm
   pipewire pipewire-pulse wireplumber
   bluez libspa-0.2-bluetooth
@@ -74,6 +74,7 @@ XINITRC_CONTENT='#!/bin/bash
 xset s off
 xset -dpms
 xset s noblank
+unclutter -idle 3 &
 exec sleep infinity'
 
 if [ "$(cat /home/tv/.xinitrc 2>/dev/null)" != "$XINITRC_CONTENT" ]; then
@@ -81,7 +82,14 @@ if [ "$(cat /home/tv/.xinitrc 2>/dev/null)" != "$XINITRC_CONTENT" ]; then
   chmod +x /home/tv/.xinitrc
 fi
 
-# ─── 6. SERVIÇOS V1 (desabilitar se existirem) ────────────
+# ─── 6. CURSOR THEME ──────────────────────────────────────
+step "Instalando cursor theme..."
+CURSOR_DIR="/home/tv/.local/share/icons/fifotv"
+mkdir -p "$CURSOR_DIR/cursors"
+cp system/cursors/fifotv/index.theme "$CURSOR_DIR/"
+cp system/cursors/fifotv/cursors/left_ptr "$CURSOR_DIR/cursors/"
+
+# ─── 7. SERVIÇOS V1 (desabilitar se existirem) ────────────
 step "Limpando serviços v1..."
 for svc in flask-fifotv openbox-fifotv fifotv-splash; do
   sudo systemctl stop "$svc" 2>/dev/null || true

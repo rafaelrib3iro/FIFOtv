@@ -578,39 +578,6 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
 
   // Inject streaming customizations after dom-ready
   streamingView.webContents.on('dom-ready', () => {
-    // Inject custom cursor (base64 data URIs to bypass CSP on streaming sites)
-    const cursorDot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqBhUVJBkc4ui0AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA2LTIxVDIxOjM2OjI1KzAwOjAwIfwVgwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNi0yMVQyMTozNjoyNSswMDowMFChrT8AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDYtMjFUMjE6MzY6MjUrMDA6MDAHtIzgAAACGUlEQVRYw+2XPU/DMBCGHzekJKhUQnxJQNXObEwMTAz8agYmBqb+BaoCUkEIqVR8VcEsl+h02LRFiDDg5Rz3cu9zPn+k8N9qbm4RZ+89QApkQA40gQQogDfgGXgBps7NF3ouLxFeATYX4L0DnmaBzATw3qfAtmS6aCuAkXNu+i0A730ObJnhBGgD62KbMv1j4F5sYd65dc49LwQQEHfADtCZI/MhcAP4WRBBAJn2HTW0DBx8owR94FU939hyfAKQBbenah4SbwFdmY0WMJGsB9KPQRTAlV6YIQC92h1wqH5OBKb3RdaXIqrXwYUqx51z7ikIINl31dCuqnkCnEjGDdkZHWAVeJQZGAHvMgunCmIIXKu4g3IWGoY+NdnqBXcg4hlwDOyLOGL3ZTwTP122jtnGlY4FyFS/bWreE/8jBdgC1sSWAkfi15PxULwsBpCr/rrql2XZVuJtlUkqz4nx60biVToWoBkh7hibE255xN/Gq3QsQBJyUlNZ1jwl3FLj14rEq3QsgN46b6pf7u1HsbGzfWr8JpF4lY4F0E5j1R8aGzzX1bj1t/EqnUYkAHKxlG0gdqQyGKuMp+YSGpn3bLxKxwK8RIgncsK9A+cKYgI8iC3Fz8Xv0pRgHNJZitSwFBiqldwHNqR/NsdJ2DclLEI6f+su4C/chtT9PaAg6vsi+gKCX/smNOWo56tYQVDb/4IAyI/+M/pvH1xY0SKRcHRhAAAAAElFTkSuQmCC';
-    const cursorHover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqBhUVJCBD52C8AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA2LTIxVDIxOjM2OjMyKzAwOjAwKPErkwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNi0yMVQyMTozNjozMiswMDowMFmsky8AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDYtMjFUMjE6MzY6MzIrMDA6MDAOubLwAAACf0lEQVRYw+WXwU9TQRDGf/ugtZQgbaGCJcHECImJ8e4Br/7NXuXg3ZiYIDGRBLS2haLpA1voeuhs/BhbYpGkJO5lZ97O7nzz7ezsPvjfW5jGOMYYgCKwCJSBEpABQ+AcyIEe0A8hxFsDEGPMgAqwOgXeNtANIQz/CUCMcQl4eHOS+RJC+DE1AKN7DbjvhopAzdhYNr0PnFrUx6Zr+w40x21LuMb5hu1zaiXgCVD/i6hbwL7lRWo5cOhBTAKw7iJfB57egP4PwFdlIoSg+p8Axuz5I+Cxm1MFNoGGsZQDR8ABcAJolJ+Az6JfyYngnGdG86TIl4AdtzW+5cAuoInnmdhPp8MDqMlRKwEvZPgB8NLkguXCGrAAnAFN2/uB2bwBvsn8t5IT7RDC8RUAlnhbMuGZJNwS8MrkVWD7Ggb27DQAvBYmWsB7sfsYQoiZfCg6OTkPRrt3PmcspYo4Z9+3hcUdCbI+xgcKYFHkmshVc1IQ50XgnszPTC8KiILNq05Yd9ED0MTSkrspEaTI5yNwmMO77qi3tJ8XJupuvl+37AGURF4WuWH9mvUFgKMcOlbvOv2RruNi35C1Kt6fApiUD4mZBbXruGIreubsldmCyJl3qreWLp9iO1O7FYV4VR86+1zMBiIPPQCt26ciH1nf1EUa5d9OV4oj3TlpuvkAXe9PASjStsgH1resvwQuArBRhueVUW9n7cLG1f5gwrq5B9AT+VjkEzMeWJFJW/RT6B6anrZuz+xzmz9u3Z4H0HdyiiBabU8RJBCX8gw7l8i1Eu7KxdQa4+MO3QXchduQWb8HBMTsXkTchTchs34VOyCz+S9wIGb3Z+SA3Pq/4czbL8CzCDfzoDluAAAAAElFTkSuQmCC';
-    streamingView.webContents.insertCSS(`
-      *, *::before, *::after {
-        cursor: url('${cursorDot}') 16 16, none !important;
-      }
-      .ytp-progress-bar, .ytp-chrome-bottom, .ytp-chrome-top,
-      button, a, [role="button"], [tabindex="0"], input, select, textarea {
-        cursor: url('${cursorHover}') 16 16, none !important;
-      }
-    `).catch(() => {});
-
-    // Inject cursor idle tracking
-    streamingView.webContents.executeJavaScript(`
-      (function() {
-        let idleTimer = null;
-        function resetIdle() {
-          document.documentElement.classList.remove('fifotv-cursor-idle');
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => {
-            document.documentElement.classList.add('fifotv-cursor-idle');
-          }, 3000);
-        }
-        document.addEventListener('mousemove', resetIdle, { passive: true });
-        resetIdle();
-      })();
-    `).catch(() => {});
-    streamingView.webContents.insertCSS(`
-      .fifotv-cursor-idle, .fifotv-cursor-idle *, .fifotv-cursor-idle *::before, .fifotv-cursor-idle *::after {
-        cursor: none !important;
-      }
-    `).catch(() => {});
     // Inject spatial-navigation blocker: when overlay menu is open, block arrow keys
     // from reaching spatial navigation (they go to overlay's D-pad handler instead)
     streamingView.webContents.executeJavaScript(`
@@ -943,29 +910,6 @@ app.whenReady().then(async () => {
     const { width: w, height: h } = getViewBounds();
     homeView.setBounds({ x: 0, y: 0, width: w, height: h });
     homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
-
-    // Cursor idle timer for homeView
-    homeView.webContents.on('dom-ready', () => {
-      homeView.webContents.executeJavaScript(`
-        (function() {
-          let idleTimer = null;
-          function resetIdle() {
-            document.documentElement.classList.remove('fifotv-cursor-idle');
-            clearTimeout(idleTimer);
-            idleTimer = setTimeout(() => {
-              document.documentElement.classList.add('fifotv-cursor-idle');
-            }, 3000);
-          }
-          document.addEventListener('mousemove', resetIdle, { passive: true });
-          resetIdle();
-        })();
-      `).catch(() => {});
-      homeView.webContents.insertCSS(`
-        .fifotv-cursor-idle, .fifotv-cursor-idle *, .fifotv-cursor-idle *::before, .fifotv-cursor-idle *::after {
-          cursor: none !important;
-        }
-      `).catch(() => {});
-    });
 
     homeView.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;
