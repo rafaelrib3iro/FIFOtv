@@ -372,12 +372,18 @@ Usuário clica em Netflix
 
 **Commits:**
 ```
+0c7a52b fix: BrowserWindow sizing + remote access
 4800e55 v2: Electron migration complete
+b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 15c9f3f docs: plano de migração v1->v2 (Electron)
 8bd2896 FIFOtv v1 - Smart TV kiosk (Chromium + Flask + Openbox)
 ```
 
-**Entregável:** Branch `electron` no GitHub com código testado e pronto pra deploy.
+**Bugs corrigidos pós-deploy:**
+- BrowserWindow não preenchia a tela (800x600) — fullscreen/kiosk dependiam de WM que foi removido. Fix: usar `getViewBounds()` pra definir tamanho explícito
+- Botão "Ativar Acesso Remoto" não funcionava — nunca foi implementado na v2. Fix: IPC handlers `remote:status`/`remote:toggle` controlando `opencode serve`
+
+**Entregável:** Branch `electron` no GitHub com código testado e rodando no all-in-one.
 
 ---
 
