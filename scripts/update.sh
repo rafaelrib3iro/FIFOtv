@@ -55,15 +55,13 @@ if [ ${#MISSING[@]} -gt 0 ]; then
   fi
 fi
 
-# ─── 4. XINITRC (sem sudo) ────────────────────────────────
+# ─── 5. XINITRC (sem sudo) ────────────────────────────────
 step "Verificando .xinitrc..."
 XINITRC_CONTENT='#!/bin/bash
 # FIFOtv v2 — Xorg setup only (Electron starts via systemd)
 xset s off
 xset -dpms
 xset s noblank
-xrdb -merge <<< "Xcursor.theme: fifotv
-Xcursor.size: 32"
 unclutter -idle 3 &
 exec sleep infinity'
 
@@ -71,13 +69,6 @@ if [ "$(cat /home/tv/.xinitrc 2>/dev/null)" != "$XINITRC_CONTENT" ]; then
   echo "$XINITRC_CONTENT" > /home/tv/.xinitrc
   chmod +x /home/tv/.xinitrc
 fi
-
-# ─── 5. CURSOR THEME (sem sudo) ───────────────────────────
-step "Instalando cursor theme..."
-CURSOR_DIR="/home/tv/.local/share/icons/fifotv"
-mkdir -p "$CURSOR_DIR/cursors"
-cp system/cursors/fifotv/index.theme "$CURSOR_DIR/"
-cp system/cursors/fifotv/cursors/left_ptr "$CURSOR_DIR/cursors/"
 
 # ─── 6. SYSTEMD SERVICE (sudo, não-fatal) ─────────────────
 step "Verificando service do systemd..."

@@ -8,8 +8,6 @@ User=tv
 Environment=DISPLAY=:0
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 Environment=XDG_RUNTIME_DIR=/run/user/1000
-Environment=XCURSOR_THEME=fifotv
-Environment=XCURSOR_SIZE=32
 WorkingDirectory=/home/tv/smarttv
 ExecStart=/usr/bin/npm start
 Restart=always
