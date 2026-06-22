@@ -15,6 +15,7 @@
 | 9 | Mouse cursor some rapidamente (invisível ao usar) | ✅ Resolvido | — |
 | 10 | Foco não volta pro streaming após toast/menu | ✅ Resolvido | — |
 | 11 | Xorg encerra imediatamente no boot (.xinitrc sem processo background) | ✅ Resolvido | `3da6532` |
+| 12 | Prime Video: play não abre vídeo (clica em reproduzir e nada acontece) | 🔴 Aberto | — |
 
 ---
 
@@ -205,5 +206,34 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 **Causa:** O `.xinitrc` terminava com `wait`, que esperava processos background. Quando removemos o `unclutter -idle 0 &` (Bug 9), não sobrou nenhum processo background. O `wait` retornava na hora, o `.xinitrc` terminava, e o Xorg encerrava.
 
 **Fix:** Substituir `wait` por `exec sleep infinity` — mantém o Xorg rodando eternamente sem processos extras.
+
+**Arquivos:** `system/.xinitrc`, `scripts/update.sh`, `update.sh`
+
+---
+
+## Bug 12 — Prime Video: play não abre vídeo
+
+**Descrição:** Ao clicar em "Reproduzir" no Prime Video (tanto com mouse quanto com D-pad/controle), o botão responde visualmente (hover/focus) mas o vídeo não abre. Nenhum erro aparece nos logs.
+
+**Diagnóstico parcial:**
+- Customização `primevideo.js` investigada — `autoFullscreen()` e seletor obfuscado removidos (commit `7b7f5e0`), mas problema persiste
+- `handleBeforeInput` no main.js só intercepta `keyDown` — mouse clicks não são bloqueados
+- Overlay não está na hierarquia de views quando streaming carrega — não bloqueia mouse
+- `shared.js` não tem `addEventListener` de click — só `MutationObserver`
+- Logs do Electron não mostram erros específicos do Prime Video
+- **`setWindowOpenHandler` NÃO EXISTE** no `streamingView.webContents`
+- **`will-navigate` NÃO EXISTE** no `streamingView.webContents`
+- Permissões: só `mediaKeySystem` é permitida
+
+**Causa provável (não confirmada):**
+O Prime Video pode usar `window.open()` pra abrir o player/DRM. Electron bloqueia `window.open()` por padrão quando não tem `setWindowOpenHandler`. O click executa, mas a ação é silenciosamente bloqueada.
+
+**Próximos passos pra confirmar:**
+1. Adicionar `setWindowOpenHandler` com logging temporário no `streamingView.webContents`
+2. Adicionar `will-navigate` handler com logging
+3. Adicionar `console-message` handler pra capturar erros JS da página
+4. Testar com User-Agent normal (sem TV identity) pra descartar spoofing
+
+**Arquivos:** `electron/main.js`, `electron/views/streaming-customizations/primevideo.js`
 
 **Arquivos:** `system/.xinitrc`, `scripts/update.sh`, `update.sh`
