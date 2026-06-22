@@ -40,15 +40,5 @@
     },
   });
 
-  // Self-ad skip (promotional ad before content)
-  S.watchAndClick('.fu4rd6c.f1cw2swo', {
-    once: false,
-    callback: function () {
-      console.log('[FIFOtv/PrimeVideo] self-ad skipped');
-    },
-  });
-
-  S.autoFullscreen();
-
   console.log('[FIFOtv] Prime Video customization loaded');
 })();
