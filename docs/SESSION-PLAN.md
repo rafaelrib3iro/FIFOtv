@@ -3,8 +3,8 @@
 ## Visão Geral
 
 ```
-Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 5.5 ✅ → Sessão 6 → Sessão 7 → Sessão 8
-  setup         serviços      streaming    controles    TV custom      fixes       teste+push  hw fixes   deploy     iso+inst    merge+tag
+Sessão 1 ✅ → Sessão 2 ✅ → Sessão 3 ✅ → Sessão 4 ✅ → Sessão 4.5 ✅ → Sessão 4.7 ✅ → Sessão 5 ✅ → Sessão 5.5 ✅ → Sessão 6 ✅ → Sessão 6.5 → Sessão 7 → Sessão 8
+  setup         serviços      streaming    controles    TV custom      fixes       teste+push  hw fixes   deploy     popups       merge+tag   iso+inst
 ```
 
 > **Regra de ouro:** `main` nunca quebra. `electron` é o laboratório. Só une quando está pronto.
@@ -443,26 +443,119 @@ sudo systemctl restart fifotv   # Reiniciar
 
 ---
 
-## Sessão 7 — Instalador + ISO
+## Sessão 6.5 — Refatoração Universal de Popups (2 etapas)
 
-**Objetivo:** Fresh install limpa com Electron.
+### Etapa A — Refatoração de Popups ✅ CONCLUÍDA
 
-**O que acontece:**
-1. Atualizar `system/install/install.sh` — instalar Node.js em vez de Flask
-2. Atualizar `system/.xinitrc` — rodar Electron em vez de Openbox+Chromium
-3. Atualizar systemd service pra rodar Electron
-4. Gerar ISO com preseed + install.sh
-5. Testar ISO no all-in-one (fresh install)
+**Objetivo:** Unificar a lógica de popups/menus num sistema genérico, eliminando código duplicado e facilitando a criação de novos popups.
 
-**Arquivos a modificar:**
-- `system/install/install.sh`
-- `system/.xinitrc`
+**O que foi feito:**
 
-**Entregável:** ISO funcional que instala e roda o v2 do zero.
+| Fase | Status | Detalhes |
+|------|--------|----------|
+| A.1 — Limpeza CSS | ✅ | `.monitor-popup.hidden`/`.fading-out` removidos (redundantes com `.popup`) |
+| A.2 — Classe `Popup` | ✅ | `frontend/popup-manager.js` — show/hide/isVisible |
+| A.3 — Container WiFi Modal | ✅ | `#wifi-modal` dedicado no HTML, parou de reusar `#add-popup` |
+| A.4 — PopupNavigator | ✅ | Navegação D-pad genérica registrada por config |
+| A.5 — Registry/Integração | ✅ | `closeAllPopups()`, Escape, hasPopups — tudo unificado |
+
+**Arquivos criados/modificados:**
+- `frontend/popup-manager.js` — classes `Popup` e `PopupNavigator`
+- `frontend/index.html` — `#wifi-modal` + `<script src="popup-manager.js">`
+- `frontend/style.css` — CSS redundante removido
+- `frontend/script.js` — instâncias Popup, popupNav, handlers substituídos
+
+**Bugs corrigidos no processo:**
+- WiFi modal não abria (`handleSettingsItemNav` sem `else el.click()`)
+- Context menu D-pad em streamings (`before-input-event` bloqueava setas no overlay)
+- Input bloqueava navegação em popups (exceção pro PopupNavigator)
+- navState leak no WiFi modal (botões cancel/confirm resetam navState)
+
+**Entregável:** Adicionar popup novo agora = 1. elemento HTML, 2. `new Popup()`, 3. `popupNav.register()`, 4. 1 linha no switch.
 
 ---
 
-## Sessão 8 — Merge + Limpeza + Tag
+### Etapa B — Handler de Navegação Genérico ✅ CONCLUÍDA
+
+**Objetivo original:** Substituir as funções `handleXxxNav` por um `PopupNavigator` declarativo.
+
+**O que foi feito:**
+
+| Fase | Status | Detalhes |
+|------|--------|----------|
+| B.1 — Context Menu | ✅ | Registrado no PopupNavigator com `onHighlight` (classe CSS) e `onEnter` |
+| B.2 — Settings | ⏸️ | Mantido manual — complexidade dos 2 sub-estados justifica |
+| B.3 — Header pills | ✅ | Registrado no PopupNavigator, ArrowDown tratado separadamente (volta pro grid) |
+| B.4 — Limpeza logs | ✅ | Todos os `[FIFOtv DBG]`, `console-message` listener, `fifotv-dbg.log` removidos |
+
+**Mudanças em `frontend/popup-manager.js`:**
+- `PopupNavigator` estendido com `onHighlight`, `onEnter`, `_indices` e `resetIndex()`
+
+**Mudanças em `frontend/script.js`:**
+- `handleContextMenuNav` + `highlightCtxItem` removidos (~40 linhas)
+- `handleHeaderNav` removido (~30 linhas)
+- `ctxMenuIndex` variável removida
+- Context menu usa classe CSS `.fifotv-focused` em vez de `style.background` inline
+- Header registrado no PopupNavigator com `onClose` que volta pro grid
+- Switch do `handleKeydown` simplificado — context-menu e header usam `popupNav.handle`
+
+**NavStates ativos:** `grid`, `header`, `context-menu`, `settings-popup`, `settings-item`, `add-popup`, `wifi-modal`
+
+---
+
+### Etapa C — Navegação D-pad em Streamings (em andamento)
+
+**Objetivo:** Fazer navegação D-pad funcionar dentro dos streamings (Netflix, YouTube, etc.).
+
+**Status atual:**
+
+| Streaming | Navegação Browse | Player D-pad | Volume/Seek bloqueado |
+|-----------|-----------------|--------------|----------------------|
+| YouTube | ✅ 100% (interface TV nativa) | N/A (usa controles próprios) | N/A |
+| Netflix | ✅ Funcional (polifill WICG) | ⚠️ Popup de detalhe foca mas navegação interna é do Netflix | ❌ Atalhos nativos do Chromium não bloqueáveis via JS |
+| Disney+ | ⏳ Não testado | ⏳ | ⏳ |
+| Max | ⏳ Não testado | ⏳ | ⏳ |
+| Prime Video | ⏳ Não testado | ⏳ | ⏳ |
+| Apple TV+ | ⏳ Não testado | ⏳ | ⏳ |
+| Globoplay | ⏳ Não testado | ⏳ | ⏳ |
+
+**O que foi implementado:**
+
+| Componente | Arquivo | Status |
+|------------|---------|--------|
+| Polyfill WICG (spatial navigation) | `electron/views/spatial-navigation/polyfill.js` | ✅ |
+| Config por streaming (enable/disable) | `electron/views/spatial-navigation/config.js` | ✅ |
+| Injeção do polifill no dom-ready | `electron/main.js` | ✅ |
+| Shared utilities (`FIFOtv.spatialNav()`) | `electron/views/streaming-customizations/shared.js` | ✅ |
+| Config per-streaming (containers, gridRows, etc.) | `electron/views/streaming-customizations/spatial-nav.js` | ✅ |
+| Auto-focus no popup de detalhe Netflix | `electron/views/streaming-customizations/netflix.js` | ✅ |
+| Diagnóstico do player | `electron/views/spatial-navigation/diagnostic.js` | ✅ (temporário) |
+
+**Descobertas técnicas:**
+
+1. **Atalhos nativos do `<video>` no Chromium:** ArrowUp/Down (volume), ArrowLeft/Right (seek), Space (play/pause) rodam no engine C++ do Chromium, NÃO via JavaScript. `event.preventDefault()` em JS não os bloqueia. Só `before-input-event` no main process bloqueia, mas isso bloqueia TUDO (incluindo polifill e YouTube).
+
+2. **Netflix não tem interface TV:** Mesmo com UA spoofing (Tizen Smart TV), Netflix serve a interface web desktop. A detecção é via headers HTTP (`Sec-CH-UA-Form-Factors: "TV"`) e JavaScript APIs (navigator, screen, WebGL).
+
+3. **`stopImmediatePropagation` do Netflix:** A `preload-streaming.js` spoofa identidade TV, e o Netflix ativa handlers agressivos de tecla que chamam `stopImmediatePropagation()` em capture phase, engolindo eventos antes de handlers downstream.
+
+4. **YouTube TV funciona nativamente:** `youtube.com/tv` tem sua própria navegação D-pad, polifill desabilitado pra YouTube.
+
+**Bugs conhecidos (pendentes):**
+- Atalhos nativos do `<video>` (volume/seek) não podem ser bloqueados via JavaScript
+- `before-input-event` com `preventDefault()` bloqueia navegação em TODOS os streamings
+- Re-injeção de eventos sintéticos causa problemas no YouTube
+- Polyfill não navega entre botões do player Netflix (elements não são candidatos espaciais)
+
+**Próximos passos (sessão futura):**
+1. Pesquisar se Cadmium Player API (`window.netflix.cadmium.objects.videoPlayer()`) ainda existe
+2. Investigar `webContents.debugger` (CDP) como alternativa de interceptação
+3. Testar outros streamings (Disney+, Max, etc.)
+4. Considerar `before-input-event` com detecção por streaming (IPC por streaming)
+
+---
+
+## Sessão 7 — Merge + Limpeza + Tag
 
 **Objetivo:** v2 vira a versão oficial, código antigo é removido.
 
@@ -479,6 +572,25 @@ sudo systemctl restart fifotv   # Reiniciar
 5. Push final
 
 **Entregável:** Repo limpo, v2.0 tagada, `main` com código novo.
+
+---
+
+## Sessão 8 — Instalador + ISO
+
+**Objetivo:** Fresh install limpa com Electron.
+
+**O que acontece:**
+1. Atualizar `system/install/install.sh` — instalar Node.js em vez de Flask
+2. Atualizar `system/.xinitrc` — rodar Electron em vez de Openbox+Chromium
+3. Atualizar systemd service pra rodar Electron
+4. Gerar ISO com preseed + install.sh
+5. Testar ISO no all-in-one (fresh install)
+
+**Arquivos a modificar:**
+- `system/install/install.sh`
+- `system/.xinitrc`
+
+**Entregável:** ISO funcional que instala e roda o v2 do zero.
 
 ---
 

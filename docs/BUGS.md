@@ -15,7 +15,15 @@
 | 9 | Mouse cursor some rapidamente (invisível ao usar) | ✅ Resolvido | — |
 | 10 | Foco não volta pro streaming após toast/menu | ✅ Resolvido | — |
 | 11 | Xorg encerra imediatamente no boot (.xinitrc sem processo background) | ✅ Resolvido | `3da6532` |
-| 12 | Prime Video: play não abre vídeo (clica em reproduzir e nada acontece) | 🔴 Aberto | — |
+| 12 | Prime Video: play não abre vídeo (clica em reproduzir e nada acontece) | ✅ Resolvido | — |
+| 13 | Cards "Mais Usados" abrem streaming errado (loading mostra um, abre outro) | ✅ Resolvido | — |
+| 14 | Navegação D-pad no settings escapa pro grid da homepage | ✅ Resolvido | — |
+| 15 | Tela não desliga após tempo inativo (DPMS não funciona) | ✅ Resolvido | — |
+| 16 | Botão voltar não funciona no YouTube (conflito com SPA) | ✅ Resolvido | — |
+| 17 | Menu de contexto do overlay não aparece visualmente (invisível mas clicável) | ✅ Resolvido | — |
+| 18 | D-pad quebrado em streamings após fix do Bug 16 (overlayMenuVisible stale) | ✅ Resolvido | — |
+| 19 | Janelas de propaganda abrem como popup branca (window.open) | ✅ Resolvido | — |
+| 20 | Highlight duplo (FIFOtv + Chromium spatial navigation) | ✅ Resolvido | — |
 
 ---
 
@@ -215,25 +223,147 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 
 **Descrição:** Ao clicar em "Reproduzir" no Prime Video (tanto com mouse quanto com D-pad/controle), o botão responde visualmente (hover/focus) mas o vídeo não abre. Nenhum erro aparece nos logs.
 
-**Diagnóstico parcial:**
-- Customização `primevideo.js` investigada — `autoFullscreen()` e seletor obfuscado removidos (commit `7b7f5e0`), mas problema persiste
-- `handleBeforeInput` no main.js só intercepta `keyDown` — mouse clicks não são bloqueados
-- Overlay não está na hierarquia de views quando streaming carrega — não bloqueia mouse
-- `shared.js` não tem `addEventListener` de click — só `MutationObserver`
-- Logs do Electron não mostram erros específicos do Prime Video
-- **`setWindowOpenHandler` NÃO EXISTE** no `streamingView.webContents`
-- **`will-navigate` NÃO EXISTE** no `streamingView.webContents`
-- Permissões: só `mediaKeySystem` é permitida
+**Causa:** Customizações específicas no `primevideo.js` (autoFullscreen, seletores obfuscados) conflitavam com o player do Prime Video.
 
-**Causa provável (não confirmada):**
-O Prime Video pode usar `window.open()` pra abrir o player/DRM. Electron bloqueia `window.open()` por padrão quando não tem `setWindowOpenHandler`. O click executa, mas a ação é silenciosamente bloqueada.
+**Fix:** Removidas as customizações específicas. `config.js` agora define `'primevideo.com': null` (sem customização). Apenas TV Identity (`preload-streaming.js`) é aplicada. Play funciona normalmente.
 
-**Próximos passos pra confirmar:**
-1. Adicionar `setWindowOpenHandler` com logging temporário no `streamingView.webContents`
-2. Adicionar `will-navigate` handler com logging
-3. Adicionar `console-message` handler pra capturar erros JS da página
-4. Testar com User-Agent normal (sem TV identity) pra descartar spoofing
+**Nota:** Navegação D-pad no Prime Video ainda é ruim (interface desktop) — será resolvido em sessão futura.
 
-**Arquivos:** `electron/main.js`, `electron/views/streaming-customizations/primevideo.js`
+**Arquivos:** `electron/views/streaming-customizations/config.js`, `electron/views/streaming-customizations/primevideo.js`
 
-**Arquivos:** `system/.xinitrc`, `scripts/update.sh`, `update.sh`
+---
+
+## Bug 13 — Cards "Mais Usados" abrem streaming errado
+
+**Descrição:** Ao clicar num card da seção "Mais Usados", a tela de loading mostra o ícone/nome de um streaming (ex: YouTube) mas abre outro (ex: Prime Video). O problema ocorre porque a ordem dos cards muda dinamicamente entre a renderização e o clique.
+
+**Causa:** `showTransition()` recalcula qual streaming abrir chamando `getMostUsed()` uma segunda vez, mas `trackUsage()` já mutou os contadores de uso entre as duas chamadas. A segunda ordenação pode resultar num streaming diferente.
+
+Fluxo do bug:
+1. `activateCard(pos)` chama `getMostUsed()` → streaming certo (ex: YouTube)
+2. `trackUsage(id)` muta `usageCounts` → YouTube sobe pra posição 0
+3. `showTransition()` chama `getMostUsed()` de novo → YouTube agora é posição 0, mas `focusedIndex` ainda é 1 → aponta pra Netflix
+4. Resultado: abre URL do YouTube, mas mostra nome/slug do Netflix
+
+**Fix:** `showTransition()` agora recebe o objeto `streaming` diretamente do `activateCard()`, sem recalcular `getMostUsed()`.
+
+**Arquivos:** `frontend/script.js` (funções `activateCard` ~linhas 659-686, `showTransition` ~linhas 688-705)
+
+---
+
+## Bug 14 — Navegação D-pad no settings escapa pro grid
+
+**Descrição:** Ao navegar com D-pad dentro do popup de configurações, pressionar seta direita repetidamente faz o foco sair do popup e ir pro grid da homepage. Usuário fica preso — não consegue voltar pro settings nem navegar de volta.
+
+**Causa:** `handleSettingsItemNav()` não tem `case 'ArrowRight'` no switch. Quando o usuário pressiona seta direita no conteúdo do popup, o evento não é capturado, `e.preventDefault()` não é chamado, e Chromium's spatial navigation move o foco pro elemento focável mais próximo à direita — um card do grid.
+
+Estado resultante: `navState` = `'settings-item'` mas foco visual está no grid → desincronização total.
+
+**Fix:** Adicionado `case 'ArrowRight': e.preventDefault(); break;` em `handleSettingsItemNav()`.
+
+**Arquivos:** `frontend/script.js` (função `handleSettingsItemNav` ~linhas 565-612)
+
+---
+
+## Bug 15 — Tela não desliga após tempo inativo (DPMS)
+
+**Descrição:** A tela de descanso (screensaver) funciona corretamente após 15 minutos, mas a tela nunca desliga. O esperado era que após tempo adicional a tela fosse desligada via DPMS.
+
+**Causa:** Três problemas combinados:
+
+1. **Timer DPMS vazio:** `dpmsTimer` em `script.js:1503` tem callback `// DPMS off not available in Electron` — não faz nada
+2. **Sem IPC channel:** Não existe handler `system:off` no main.js nem API no preload pra desligar a tela
+3. **DPMS desabilitado no X:** `.xinitrc` tem `xset -dpms` que desliga o DPMS globalmente
+
+**Nota:** O timeout configurado é 30min (`DPMS_TIMEOUT = 30 * 60 * 1000`), não 1h.
+
+**Fix:**
+1. Re-enable DPMS no `.xinitrc`: `xset -dpms` → `xset +dpms` + `xset dpms 0 0 1800` (off após 30min)
+2. Criado IPC handler `system:screen-off` no main.js → `exec('xset dpms force off')`
+3. Exposto `screenOff()` no preload.js
+4. Timer no `script.js` chama `window.fifotv.screenOff()`
+5. Mesma correção aplicada em `system/install/configure.sh`
+
+**Arquivos:** `system/.xinitrc`, `system/install/configure.sh`, `electron/main.js`, `electron/preload.js`, `frontend/script.js`
+
+---
+
+## Bug 16 — Botão voltar não funciona no YouTube
+
+**Descrição:** Ao apertar o botão voltar (air mouse / controle remoto) dentro do YouTube TV, nada acontece. Em outros streamings (Netflix, Disney+, etc.) o voltar funciona normalmente.
+
+**Causa:** `handleAppCommand` em `main.js:684` chama `navigationHistory.goBack()` quando o botão voltar é pressionado. Isso faz uma navegação de browser level (Chromium navega pra URL anterior). Mas YouTube TV é um SPA (Single Page Application) — toda navegação é interna via JavaScript. O `goBack()` navega pra fora do YouTube TV em vez de deixar o SPA tratar internamente.
+
+**Por que só afeta o YouTube:** YouTube é o único streaming que roda em `/tv` (interface TV completa, SPA). Outros streamings são sites desktop normais — `goBack()` funciona pra eles.
+
+**Fluxo do bug:**
+1. Usuário aperta voltar → `app-command` fires com `cmd = 'browser-backward'`
+2. `handleAppCommand`: overlay fechado ✅, streamingView existe ✅, `canGoBack()` ✅
+3. Chama `navigationHistory.goBack()` → Chromium navega pra URL anterior
+4. YouTube TV nunca recebe o evento pra tratar internamente
+
+**Fix:** Abordagem condicional — `SPA_DOMAINS` define quais sites são SPA. `handleAppCommand` verifica o slug do streaming atual:
+- **SPA (YouTube):** `sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })` + `sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })` — injeta tecla no pipeline nativo do Chromium
+- **Não-SPA (Netflix, etc.):** `navigationHistory.goBack()` — navegação de browser level
+
+**Arquivos:** `electron/main.js` (variáveis `SPA_DOMAINS`, `currentStreamingSlug`, função `handleAppCommand`), `electron/preload-streaming.js` (removido listener `key-event`)
+
+---
+
+## Bug 17 — Menu de contexto do overlay não aparece visualmente
+
+**Descrição:** Ao apertar o botão de menu de contexto, o menu não aparece visualmente, mas as opções existem no DOM e são clicáveis (navegar com D-pad e pressionar Enter aciona uma opção). O toast de volume funciona normalmente.
+
+**Causa:** O `#fifotv-ctx` tinha `animation: fifotv-menu-in 200ms ease-out` que ia de `opacity: 0` → `opacity: 1`. No GMA 3600 do Celeron N3060, a animação falhava silenciosamente, deixando o elemento preso em `opacity: 0`. Além disso, o `hideMenu()` usava `transition` + `setTimeout` pro fade-out, que também conflitava.
+
+**Fix:**
+1. Removidos `animation` e `transition` do `#fifotv-ctx` no `overlay.css`
+2. Adicionado `opacity: 1` explícito no CSS
+3. `showMenu()` agora seta `menu.style.opacity = '1'` e `menu.style.display = ''`
+4. `hideMenu()` agora usa `display: none` direto (sem fade-out)
+
+**Arquivos:** `electron/views/overlay.css`, `electron/views/overlay.js`
+
+---
+
+## Bug 18 — D-pad quebrado em streamings após fix do Bug 16
+
+**Descrição:** Após o fix do Bug 16 (botão voltar), a navegação por D-pad parou de funcionar em todos os streamings (funcionava só na homepage).
+
+**Causa:** `overlayMenuVisible` não era resetado ao abrir um streaming. Se o valor ficava `true` de uma sessão anterior, o `handleBeforeInput` interceptava TODAS as setas e encaminhava pro overlay. O overlay recebia mas não processava (porque `menuVisible` era `false`), resultando em setas engolidas.
+
+**Fix:** Adicionado `overlayMenuVisible = false` no handler `nav:open-streaming` em `main.js`.
+
+**Arquivos:** `electron/main.js`
+
+---
+
+## Bug 19 — Janelas de propaganda abrem como popup branca
+
+**Descrição:** Sites de streaming aleatórios abrem janelas de propaganda (popups) quando o usuário clica. A janela aparece branca com menu "File Edit View Window" e código "0x50014".
+
+**Causa:** Sites chamam `window.open()` pra abrir propagandas. Electron cria um novo `BrowserWindow` por padrão.
+
+**Fix:** Adicionado `setWindowOpenHandler` no `streamingView.webContents` pra bloquear todas as chamadas `window.open()`:
+```js
+streamingView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+```
+
+**Arquivos:** `electron/main.js`
+
+---
+
+## Bug 20 — Highlight duplo (FIFOtv + Chromium spatial navigation)
+
+**Descrição:** No menu de contexto e settings, aparecem dois highlights: o do FIFOtv e o do Chromium (anel azul). Além disso, ambos processam as setas ao mesmo tempo, causando ação dupla.
+
+**Causa:** `enable-spatial-navigation` é um switch global do Chromium que não pode ser desativado por webContents. `e.preventDefault()` no JavaScript não bloqueia porque spatial navigation roda num nível mais baixo (browser input pipeline).
+
+**Fix (Fase 1):**
+1. `before-input-event` no `homeView.webContents`: bloqueia arrow keys via `event.preventDefault()` + re-injeta via `sendInputEvent()` pra handlers JS funcionarem
+2. `before-input-event` no `overlayView.webContents`: mesma lógica quando `overlayMenuVisible` é true
+3. CSS `*:focus { outline: none }` em `overlay.css` e `style.css` pra remover highlight visual
+
+**Pesquisa de alternativas:** `docs/SPATIAL-NAVIGATION-RESEARCH.md` — `js-spatial-navigation` é melhor que o nativo do Chromium pra streaming pages (Fase 2, sessão futura).
+
+**Arquivos:** `electron/main.js`, `electron/views/overlay.js`, `electron/views/overlay.css`, `frontend/script.js`, `frontend/style.css`

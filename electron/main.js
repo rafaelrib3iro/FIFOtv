@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, shell, screen, session, components } = require('electron');
+const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, shell, screen, session, components, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
@@ -15,12 +15,23 @@ let appCommandAttached = false;
 let overlayMenuVisible = false;
 let remoteProcess = null;
 let remoteRunning = false;
+let currentStreamingSlug = null;
+let powerSaveBlockerId = null;
 const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
-const STREAMING_CONFIG = require('./views/streaming-customizations/config');
 const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
+const SPA_DOMAINS = new Set(['youtube']);
+
+function loadFreshConfig(relativePath) {
+  const fullPath = path.join(__dirname, relativePath);
+  delete require.cache[require.resolve(fullPath)];
+  return require(fullPath);
+}
+
+const getStreamingConfig = () => loadFreshConfig('./views/streaming-customizations/config');
+const getSpatialNavConfig = () => loadFreshConfig('./views/spatial-navigation/config');
 
 // ─── CHROMIUM SWITCHES (must be before app.whenReady) ────────
-app.commandLine.appendSwitch('enable-spatial-navigation');
+// Spatial navigation disabled — polyfill injected per-streaming via executeJavaScript
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('gtk-version', '3'); // Avoid GTK 4 issues on Debian/GNOME
@@ -188,6 +199,11 @@ ipcMain.handle('system:info', () => {
     }
   }
   return { ip, hostname: os.hostname() };
+});
+
+ipcMain.handle('system:screen-off', () => {
+  exec('xset dpms force off');
+  return { ok: true };
 });
 
 // ─── VOLUME (wpctl) ────────────────────────────────────────
@@ -511,6 +527,12 @@ function forwardToOverlay(input) {
   }
 }
 
+function resetHomeScreensaver() {
+  if (homeView && !homeView.webContents.isDestroyed()) {
+    homeView.webContents.send('screensaver:reset');
+  }
+}
+
 function destroyStreamingViews() {
   if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
 
@@ -535,6 +557,13 @@ function destroyStreamingViews() {
 
 ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   if (streamingView) return { ok: false, error: 'streaming already open' };
+  currentStreamingSlug = slug;
+  overlayMenuVisible = false;
+
+  // Prevent display sleep while streaming is active
+  if (powerSaveBlockerId === null) {
+    powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+  }
 
   const { width, height } = getViewBounds();
 
@@ -543,73 +572,105 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
     url = 'https://www.youtube.com/tv';
   }
 
+  // Normalize URL — add protocol if missing
+  if (url && !url.match(/^https?:\/\//i)) {
+    url = 'https://' + url;
+  }
+
+  const isPrimeVideo = url.includes('primevideo.com');
+
   // Create streaming view — loads in background behind loading
   streamingView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-streaming.js'),
       contextIsolation: false,
       nodeIntegration: false,
+      additionalArguments: [slug],
     }
   });
   streamingView.setBackgroundColor('#0a0816');
   streamingView.setBounds({ x: 0, y: 0, width, height });
+  streamingView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  // TV Identity — User-Agent + Client Hints headers
-  const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
-  streamingView.webContents.setUserAgent(SMART_TV_UA);
-  streamingView.webContents.session.webRequest.onBeforeSendHeaders(
-    { urls: ['*://*/*'] },
-    (details, callback) => {
-      details.requestHeaders['Sec-CH-UA-Platform'] = '"Tizen"';
-      details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
-      details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="149", "Not_A Brand";v="24"';
-      details.requestHeaders['Sec-CH-UA-Full-Version-List'] = '"Chromium";v="149.0.0.0", "Not_A Brand";v="24.0.0.0"';
-      details.requestHeaders['Sec-CH-UA-Platform-Version'] = '"6.5.0"';
-      details.requestHeaders['Sec-CH-UA-Model'] = '""';
-      details.requestHeaders['Sec-CH-UA-Form-Factors'] = '"TV"';
-      callback({ requestHeaders: details.requestHeaders });
-    }
-  );
+  // TV Identity — User-Agent + Client Hints headers (skip for Prime Video and Netflix)
+  const skipTvIdentity = isPrimeVideo || slug === 'netflix';
+  if (!skipTvIdentity) {
+    const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
+    streamingView.webContents.setUserAgent(SMART_TV_UA);
+    streamingView.webContents.session.webRequest.onBeforeSendHeaders(
+      { urls: ['*://*/*'] },
+      (details, callback) => {
+        details.requestHeaders['Sec-CH-UA-Platform'] = '"Tizen"';
+        details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
+        details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="149", "Not_A Brand";v="24"';
+        details.requestHeaders['Sec-CH-UA-Full-Version-List'] = '"Chromium";v="149.0.0.0", "Not_A Brand";v="24.0.0.0"';
+        details.requestHeaders['Sec-CH-UA-Platform-Version'] = '"6.5.0"';
+        details.requestHeaders['Sec-CH-UA-Model'] = '""';
+        details.requestHeaders['Sec-CH-UA-Form-Factors'] = '"TV"';
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
+  }
 
   streamingView.webContents.loadURL(url);
   streamingView.webContents.on('did-fail-load', (_, code, desc) => {
     console.error(`[streaming] failed to load: ${code} ${desc}`);
   });
 
-  // Inject streaming customizations after dom-ready
+  // Inject spatial navigation polyfill + streaming customizations after dom-ready
   streamingView.webContents.on('dom-ready', () => {
-    // Inject spatial-navigation blocker: when overlay menu is open, block arrow keys
-    // from reaching spatial navigation (they go to overlay's D-pad handler instead)
-    streamingView.webContents.executeJavaScript(`
-      window.__fifotv_no_spatial = false;
-      document.addEventListener('keydown', (e) => {
-        if (window.__fifotv_no_spatial && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-        }
-      }, true);
-    `).catch(() => {});
-
     const currentUrl = streamingView.webContents.getURL();
+
+    // 1. Inject WICG spatial navigation polyfill
+    const SN_CONFIG = getSpatialNavConfig();
+    const streamConfig = SN_CONFIG[slug] || {};
+    if (streamConfig.enabled !== false) {
+      try {
+        const polyfillCode = fs.readFileSync(
+          path.join(__dirname, 'views', 'spatial-navigation', 'polyfill.js'), 'utf8'
+        );
+        streamingView.webContents.executeJavaScript(polyfillCode).catch(() => {});
+      } catch (err) {
+        console.error(`[FIFOtv] Polyfill read ERROR: ${err.message}`);
+      }
+    }
+
+    // 2. Inject shared utilities + spatial-nav config
+    try {
+      const sharedCode = fs.readFileSync(path.join(CUSTOM_DIR, 'shared.js'), 'utf8');
+      streamingView.webContents.executeJavaScript(sharedCode).catch(() => {});
+
+      streamingView.webContents.executeJavaScript(`window.__FIFOtv_slug = ${JSON.stringify(slug)};`);
+
+      const spatialNavCode = fs.readFileSync(path.join(CUSTOM_DIR, 'spatial-nav.js'), 'utf8');
+      streamingView.webContents.executeJavaScript(spatialNavCode).catch(() => {});
+    } catch (err) {
+      console.error(`[FIFOtv] Shared injection ERROR: ${err.message}`);
+    }
+
+    // 3. Inject streaming-specific customization
     let scriptFile = null;
-    for (const [domain, file] of Object.entries(STREAMING_CONFIG)) {
+    for (const [domain, file] of Object.entries(getStreamingConfig())) {
       if (currentUrl.includes(domain)) {
         scriptFile = file;
         break;
       }
     }
-    if (!scriptFile) return;
-
-    try {
-      const sharedCode = fs.readFileSync(path.join(CUSTOM_DIR, 'shared.js'), 'utf8');
-      streamingView.webContents.executeJavaScript(sharedCode);
-
-      const scriptCode = fs.readFileSync(path.join(CUSTOM_DIR, scriptFile), 'utf8');
-      streamingView.webContents.executeJavaScript(scriptCode);
-      console.log(`[streaming] injected: ${scriptFile}`);
-    } catch (err) {
-      console.error(`[streaming] injection failed: ${err.message}`);
+    if (scriptFile) {
+      try {
+        const scriptCode = fs.readFileSync(path.join(CUSTOM_DIR, scriptFile), 'utf8');
+        streamingView.webContents.executeJavaScript(scriptCode).catch(() => {});
+      } catch (err) {
+        console.error(`[FIFOtv] ${scriptFile} read ERROR: ${err.message}`);
+      }
     }
+
+    // Re-focus streaming view after page loads (Netflix may steal focus)
+    setTimeout(() => {
+      if (streamingView && !streamingView.webContents.isDestroyed()) {
+        streamingView.webContents.focus();
+      }
+    }, 3000);
   });
 
   // Create loading view — shows icon + name + spinner
@@ -639,6 +700,11 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   overlayView.setBounds({ x: 0, y: 0, width, height });
   overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
 
+  // NOTE: before-input-event on overlay was previously blocking arrow keys
+  // when menu was open (prevented default + sendInputEvent), which broke
+  // D-pad navigation in the overlay's context menu. Removed — the overlay's
+  // handleKey function already handles arrows when menu is open.
+
   // Z-order: homeView (bottom), streamingView (top, receives mouse)
   // overlay is NOT added here — it's added/removed dynamically via IPC handlers
   addView(streamingView);
@@ -666,12 +732,19 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
 });
 
 function handleAppCommand(_, cmd) {
+  resetHomeScreensaver();
   if (cmd === 'browser-backward') {
     if (overlayMenuVisible) {
       forwardToOverlay({ key: 'BrowserBack', type: 'keyDown' });
     } else if (streamingView && !streamingView.webContents.isDestroyed()) {
-      if (streamingView.webContents.navigationHistory.canGoBack()) {
-        streamingView.webContents.navigationHistory.goBack();
+      const isSpa = currentStreamingSlug && SPA_DOMAINS.has(currentStreamingSlug);
+      if (isSpa) {
+        streamingView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+        streamingView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+      } else {
+        if (streamingView.webContents.navigationHistory.canGoBack()) {
+          streamingView.webContents.navigationHistory.goBack();
+        }
       }
     }
   } else if (cmd === 'browser-forward') {
@@ -680,6 +753,7 @@ function handleAppCommand(_, cmd) {
 }
 
 function handleBeforeInput(event, input) {
+  if (input.type === 'keyDown') resetHomeScreensaver();
   if (!isOverlayAlive()) return;
   if (input.type !== 'keyDown') return;
 
@@ -693,6 +767,16 @@ function handleBeforeInput(event, input) {
     event.preventDefault();
     forwardToOverlay(input);
     return;
+  }
+
+  // Auto-focus first focusable element on first arrow key press
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(input.key) && !overlayMenuVisible) {
+    streamingView.webContents.executeJavaScript(`
+      if (document.activeElement === document.body || document.activeElement === document.documentElement) {
+        const first = document.querySelector('button, a, [tabindex], input, [role="button"]');
+        if (first) { first.focus(); }
+      }
+    `).catch(() => {});
   }
 
   // When menu is open, overlay is behind streaming — forward arrow/Enter keys via IPC
@@ -710,6 +794,14 @@ ipcMain.handle('nav:reload-streaming', () => {
 });
 
 ipcMain.handle('nav:go-home', () => {
+  currentStreamingSlug = null;
+
+  // Stop preventing display sleep
+  if (powerSaveBlockerId !== null) {
+    powerSaveBlocker.stop(powerSaveBlockerId);
+    powerSaveBlockerId = null;
+  }
+
   // Remove app-command listener from win
   if (appCommandAttached) {
     win.removeListener('app-command', handleAppCommand);
@@ -721,6 +813,7 @@ ipcMain.handle('nav:go-home', () => {
     destroyStreamingViews();
     if (homeView && !homeView.webContents.isDestroyed()) {
       homeView.webContents.focus();
+      resetHomeScreensaver();
     }
   });
 
@@ -753,12 +846,6 @@ ipcMain.handle('overlay:focus', (_, target) => {
 
 ipcMain.on('overlay:menu-visibility', (_, visible) => {
   overlayMenuVisible = visible;
-  // Toggle spatial-navigation blocking on streaming page
-  if (streamingView && !streamingView.webContents.isDestroyed()) {
-    streamingView.webContents.executeJavaScript(
-      `window.__fifotv_no_spatial = ${visible};`
-    ).catch(() => {});
-  }
 });
 
 // Z-order management: bring overlay to front when menu opens, send back when it closes
@@ -938,6 +1025,7 @@ app.whenReady().then(async () => {
   });
 
   globalShortcut.register('VolumeUp', () => {
+    resetHomeScreensaver();
     if (isOverlayAlive()) {
       overlayView.webContents.send('key-event', { key: 'VolumeUp', type: 'keyDown' });
     } else if (homeView && !homeView.webContents.isDestroyed()) {
@@ -945,6 +1033,7 @@ app.whenReady().then(async () => {
     }
   });
   globalShortcut.register('VolumeDown', () => {
+    resetHomeScreensaver();
     if (isOverlayAlive()) {
       overlayView.webContents.send('key-event', { key: 'VolumeDown', type: 'keyDown' });
     } else if (homeView && !homeView.webContents.isDestroyed()) {
@@ -952,6 +1041,7 @@ app.whenReady().then(async () => {
     }
   });
   globalShortcut.register('MediaPlayPause', () => {
+    resetHomeScreensaver();
     if (isOverlayAlive()) {
       overlayView.webContents.send('key-event', { key: 'MediaPlayPause', type: 'keyDown' });
     } else if (homeView && !homeView.webContents.isDestroyed()) {

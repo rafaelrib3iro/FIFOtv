@@ -73,7 +73,8 @@ cat > "$TV_HOME/.xinitrc" << 'XINEOF'
 #!/bin/bash
 
 xset s off
-xset -dpms
+xset +dpms
+xset dpms 0 0 3600
 xset s noblank
 
 feh --bg-scale /home/tv/smarttv/frontend/assets/splash-bg.png &

@@ -1,6 +1,6 @@
 module.exports = {
   'netflix.com': 'netflix.js',
-  'primevideo.com': 'primevideo.js',
+  'primevideo.com': null,
   'youtube.com': null,
   'tv.apple.com': 'appletv.js',
   'music.apple.com': 'applemusic.js',

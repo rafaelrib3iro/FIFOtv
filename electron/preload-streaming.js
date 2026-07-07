@@ -1,6 +1,11 @@
 (() => {
   'use strict';
 
+  const slug = process.argv?.find(a => !a.startsWith('-') && a !== 'electron');
+  const isPrimeVideo = slug === 'primevideo';
+
+  if (isPrimeVideo) return;
+
   const UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 
   const descriptors = {

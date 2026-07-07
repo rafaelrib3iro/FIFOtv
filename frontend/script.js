@@ -76,7 +76,7 @@ const PALETTES = [
 ];
 
 const SS_TIMEOUT = 15 * 60 * 1000;
-const DPMS_TIMEOUT = 30 * 60 * 1000;
+const DPMS_TIMEOUT = 60 * 60 * 1000;
 
 // Sound effects
 const SFX = {
@@ -128,11 +128,61 @@ let dpmsTimer = null;
 let initialRender = true;
 
 // Navigation state machine
-// States: 'grid', 'context-menu', 'settings-popup', 'add-popup'
+// States: 'grid', 'header', 'context-menu', 'settings-popup', 'settings-item', 'settings-sub-item', 'add-popup', 'wifi-modal'
 let navState = 'grid';
-let ctxMenuIndex = 0;
 let settingsSectionIndex = 0;
 let settingsItemIndex = 0;
+let settingsSubItemIndex = 0;
+
+const settingsPopup = new Popup('settings-popup');
+const addPopup = new Popup('add-popup');
+const monitorPopup = new Popup('monitor-popup');
+const wifiModal = new Popup('wifi-modal');
+
+const popupNav = new PopupNavigator();
+
+popupNav.register('add-popup', {
+    getFocusables: () => [document.getElementById('add-url'), document.getElementById('add-name'), document.getElementById('add-cancel'), document.getElementById('add-confirm')].filter(Boolean),
+    onClose: () => { addPopup.hide(false); navState = 'grid'; }
+});
+
+popupNav.register('wifi-modal', {
+    getFocusables: () => [document.getElementById('wifi-pass-input'), document.getElementById('wifi-pass-cancel'), document.getElementById('wifi-pass-confirm')].filter(Boolean),
+    onClose: () => { document.getElementById('wifi-pass-cancel').click(); }
+});
+
+popupNav.register('context-menu', {
+    getFocusables: () => {
+        const menu = document.getElementById('context-menu');
+        return Array.from(menu.querySelectorAll('.context-menu-item')).filter(el => el.offsetParent !== null);
+    },
+    onHighlight: (items, idx) => {
+        items.forEach((el, i) => {
+            el.classList.toggle('fifotv-focused', i === idx);
+        });
+    },
+    onEnter: (items, idx) => {
+        const item = items[idx];
+        if (!item) return;
+        if (item.dataset.action === 'vol-bar') return;
+        item.click();
+    },
+    onClose: () => { hideContextMenu(); navState = 'grid'; }
+});
+
+popupNav.register('header', {
+    getFocusables: () => Array.from(document.querySelectorAll('.pill')),
+    onEnter: (items, idx) => {
+        if (items[idx]) items[idx].click();
+    },
+    onClose: () => {
+        navState = 'grid';
+        document.activeElement.blur();
+        document.querySelectorAll('.pill.fifotv-focused').forEach(el => el.classList.remove('fifotv-focused'));
+        focusedIndex = 0;
+        updateFocus();
+    }
+});
 
 function applyRandomPalette() {
     const palette = PALETTES[Math.floor(Math.random() * PALETTES.length)];
@@ -253,9 +303,9 @@ function renderGrid() {
 function updateFocus() {
     if (!initialRender) playSound('hover');
     initialRender = false;
-    document.querySelectorAll('.card').forEach(c => c.classList.remove('focused'));
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('fifotv-focused'));
     const target = document.querySelector(`.card[data-pos="${focusedIndex}"]`);
-    if (target) target.classList.add('focused');
+    if (target) target.classList.add('fifotv-focused');
 }
 
 function handleKeydown(e) {
@@ -278,7 +328,13 @@ function handleKeydown(e) {
         return;
     }
 
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        // Popup navigator handles arrows/escape even when input is focused
+        if (['add-popup', 'wifi-modal'].includes(navState) && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            popupNav.handle(e, navState);
+        }
+        return;
+    }
 
     console.log(`[FIFOtv Key] key="${e.key}" code="${e.code}" keyCode=${e.keyCode} which=${e.which}`);
 
@@ -337,34 +393,51 @@ function handleKeydown(e) {
 
     // Global escape handler — always close popups
     if (e.key === 'Escape') {
-        if (navState === 'context-menu') { hideContextMenu(); e.preventDefault(); return; }
-        if (navState === 'settings-popup' || navState === 'settings-item') { closeAllPopups(); e.preventDefault(); return; }
-        if (navState === 'add-popup') { closeAllPopups(); e.preventDefault(); return; }
+        if (navState === 'context-menu' || navState === 'header') { popupNav.handle(e, navState); return; }
+        if (navState === 'settings-popup' || navState === 'settings-item' || navState === 'settings-sub-item') { closeAllPopups(); e.preventDefault(); return; }
+        if (navState === 'add-popup' || navState === 'wifi-modal') { popupNav.handle(e, navState); return; }
     }
 
     switch (navState) {
         case 'grid':
             handleGridNav(e);
             break;
-        case 'context-menu':
-            handleContextMenuNav(e);
+        case 'context-menu': {
+            const menu = document.getElementById('context-menu');
+            const focused = menu.querySelector('.context-menu-item.fifotv-focused');
+            if (focused && focused.dataset.action === 'vol-bar' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                changeVolume(e.key === 'ArrowLeft' ? 'down' : 'up');
+                e.preventDefault();
+            } else {
+                popupNav.handle(e, navState);
+            }
             break;
+        }
         case 'settings-popup':
             handleSettingsNav(e);
             break;
         case 'settings-item':
             handleSettingsItemNav(e);
             break;
-        case 'header':
-            handleHeaderNav(e);
+        case 'settings-sub-item':
+            handleSettingsSubItemNav(e);
             break;
-        case 'add-popup':
-            // Only Escape works in add popup
-            if (e.key === 'Escape') {
-                document.getElementById('add-popup').classList.add('hidden');
+        case 'header': {
+            if (e.key === 'ArrowDown') {
                 navState = 'grid';
+                document.activeElement.blur();
+                document.querySelectorAll('.pill.fifotv-focused').forEach(el => el.classList.remove('fifotv-focused'));
+                focusedIndex = 0;
+                updateFocus();
                 e.preventDefault();
+            } else {
+                popupNav.handle(e, navState);
             }
+            break;
+        }
+        case 'add-popup':
+        case 'wifi-modal':
+            popupNav.handle(e, navState);
             break;
     }
 }
@@ -428,7 +501,7 @@ function handleGridNav(e) {
             e.preventDefault();
             if (hasRecents && focusedIndex < recentsCount) {
                 // Recents → header pills
-                document.querySelectorAll('.card').forEach(c => c.classList.remove('focused'));
+                document.querySelectorAll('.card').forEach(c => c.classList.remove('fifotv-focused'));
                 const pill = document.getElementById('btn-settings');
                 if (pill) pill.focus();
                 navState = 'header';
@@ -441,7 +514,7 @@ function handleGridNav(e) {
                 }
             } else if (!hasRecents && focusedIndex < mainCols) {
                 // No recents, first row → header pills
-                document.querySelectorAll('.card').forEach(c => c.classList.remove('focused'));
+                document.querySelectorAll('.card').forEach(c => c.classList.remove('fifotv-focused'));
                 const pill = document.getElementById('btn-settings');
                 if (pill) pill.focus();
                 navState = 'header';
@@ -474,45 +547,9 @@ function handleGridNav(e) {
     }
 }
 
-function handleContextMenuNav(e) {
-    const menu = document.getElementById('context-menu');
-    const items = menu.querySelectorAll('.context-menu-item, .context-volume-btn');
-    const visibleItems = Array.from(items).filter(el => el.offsetParent !== null);
-    
-    if (visibleItems.length === 0) {
-        navState = 'grid';
-        return;
-    }
-
-    switch (e.key) {
-        case 'ArrowDown':
-            ctxMenuIndex = Math.min(ctxMenuIndex + 1, visibleItems.length - 1);
-            highlightCtxItem(visibleItems);
-            playSound('hover');
-            e.preventDefault();
-            break;
-        case 'ArrowUp':
-            ctxMenuIndex = Math.max(ctxMenuIndex - 1, 0);
-            highlightCtxItem(visibleItems);
-            playSound('hover');
-            e.preventDefault();
-            break;
-        case 'Enter':
-            if (visibleItems[ctxMenuIndex]) visibleItems[ctxMenuIndex].click();
-            e.preventDefault();
-            break;
-        case 'Escape':
-            hideContextMenu();
-            navState = 'grid';
-            e.preventDefault();
-            break;
-    }
-}
-
-function highlightCtxItem(items) {
-    items.forEach((el, i) => {
-        el.style.background = i === ctxMenuIndex ? 'rgba(255,255,255,0.12)' : '';
-    });
+function clearSettingsFocus() {
+    const popup = document.getElementById('settings-popup');
+    if (popup) popup.querySelectorAll('.fifotv-focused').forEach(el => el.classList.remove('fifotv-focused'));
 }
 
 function handleSettingsNav(e) {
@@ -521,26 +558,31 @@ function handleSettingsNav(e) {
     
     switch (e.key) {
         case 'ArrowDown':
+            clearSettingsFocus();
             settingsSectionIndex = Math.min(settingsSectionIndex + 1, sidebarItems.length - 1);
             settingsItemIndex = 0;
             sidebarItems[settingsSectionIndex].click();
+            sidebarItems[settingsSectionIndex].classList.add('fifotv-focused');
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowUp':
+            clearSettingsFocus();
             settingsSectionIndex = Math.max(settingsSectionIndex - 1, 0);
             settingsItemIndex = 0;
             sidebarItems[settingsSectionIndex].click();
+            sidebarItems[settingsSectionIndex].classList.add('fifotv-focused');
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowRight': {
-            // Focus first focusable element in content area
+            clearSettingsFocus();
             const activeSection = popup.querySelector('.settings-section.active');
             if (activeSection) {
                 const contentItems = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
                 const firstItem = contentItems[0];
                 if (firstItem) {
+                    firstItem.classList.add('fifotv-focused');
                     firstItem.focus();
                     settingsItemIndex = 0;
                     navState = 'settings-item';
@@ -550,7 +592,8 @@ function handleSettingsNav(e) {
             break;
         }
         case 'ArrowLeft':
-            // Go back to sidebar
+            clearSettingsFocus();
+            sidebarItems[settingsSectionIndex].classList.add('fifotv-focused');
             sidebarItems[settingsSectionIndex].focus();
             e.preventDefault();
             break;
@@ -574,23 +617,42 @@ function handleSettingsItemNav(e) {
 
     switch (e.key) {
         case 'ArrowDown':
+            clearSettingsFocus();
             settingsItemIndex = Math.min(settingsItemIndex + 1, visibleItems.length - 1);
+            visibleItems[settingsItemIndex].classList.add('fifotv-focused');
             visibleItems[settingsItemIndex].focus();
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowUp':
+            clearSettingsFocus();
             settingsItemIndex = Math.max(settingsItemIndex - 1, 0);
+            visibleItems[settingsItemIndex].classList.add('fifotv-focused');
             visibleItems[settingsItemIndex].focus();
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowLeft':
-            // Go back to sidebar
+            clearSettingsFocus();
             navState = 'settings-popup';
+            sidebarItems[settingsSectionIndex].classList.add('fifotv-focused');
             sidebarItems[settingsSectionIndex].focus();
             e.preventDefault();
             break;
+        case 'ArrowRight': {
+            const el = visibleItems[settingsItemIndex];
+            const subBtns = el ? Array.from(el.querySelectorAll('.btn-icon')) : [];
+            if (subBtns.length > 0) {
+                clearSettingsFocus();
+                settingsSubItemIndex = 0;
+                navState = 'settings-sub-item';
+                subBtns[0].classList.add('fifotv-focused');
+                subBtns[0].focus();
+                playSound('hover');
+            }
+            e.preventDefault();
+            break;
+        }
         case 'Escape':
             closeAllPopups();
             navState = 'grid';
@@ -602,6 +664,7 @@ function handleSettingsItemNav(e) {
                 if (el.classList.contains('streaming-item')) {
                     const btn = el.querySelector('.btn-icon');
                     if (btn) btn.click();
+                    else el.click();
                 } else {
                     el.click();
                 }
@@ -611,46 +674,91 @@ function handleSettingsItemNav(e) {
     }
 }
 
-function handleHeaderNav(e) {
-    const pills = document.querySelectorAll('.pill');
-    const pillArray = Array.from(pills);
-    
-    // Find which pill is currently focused
-    const currentFocused = document.activeElement;
-    let currentIndex = pillArray.indexOf(currentFocused);
-    if (currentIndex === -1) currentIndex = 0;
+function handleSettingsSubItemNav(e) {
+    const popup = document.getElementById('settings-popup');
+    const sidebarItems = popup.querySelectorAll('.settings-sidebar-item');
+    const activeSection = popup.querySelector('.settings-section.active');
+    if (!activeSection) { navState = 'settings-popup'; return; }
+
+    const items = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
+    const visibleItems = Array.from(items).filter(el => el.offsetParent !== null);
+    if (visibleItems.length === 0) { navState = 'settings-popup'; return; }
+
+    const currentItem = visibleItems[settingsItemIndex];
+    if (!currentItem) { navState = 'settings-item'; return; }
+
+    const subButtons = Array.from(currentItem.querySelectorAll('.btn-icon'));
+    if (subButtons.length === 0) { navState = 'settings-item'; return; }
 
     switch (e.key) {
         case 'ArrowRight':
-            currentIndex = Math.min(currentIndex + 1, pillArray.length - 1);
-            pillArray[currentIndex].focus();
+            clearSettingsFocus();
+            settingsSubItemIndex = Math.min(settingsSubItemIndex + 1, subButtons.length - 1);
+            subButtons[settingsSubItemIndex].classList.add('fifotv-focused');
+            subButtons[settingsSubItemIndex].focus();
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowLeft':
-            currentIndex = Math.max(currentIndex - 1, 0);
-            pillArray[currentIndex].focus();
+            if (settingsSubItemIndex === 0) {
+                clearSettingsFocus();
+                navState = 'settings-item';
+                currentItem.classList.add('fifotv-focused');
+                currentItem.focus();
+            } else {
+                clearSettingsFocus();
+                settingsSubItemIndex--;
+                subButtons[settingsSubItemIndex].classList.add('fifotv-focused');
+                subButtons[settingsSubItemIndex].focus();
+            }
             playSound('hover');
             e.preventDefault();
             break;
         case 'ArrowDown':
-            // Go back to grid
-            navState = 'grid';
-            document.activeElement.blur();
-            focusedIndex = 0;
-            updateFocus();
+            clearSettingsFocus();
+            settingsSubItemIndex = 0;
+            settingsItemIndex = Math.min(settingsItemIndex + 1, visibleItems.length - 1);
+            const nextBtns = Array.from(visibleItems[settingsItemIndex].querySelectorAll('.btn-icon'));
+            if (nextBtns.length > 0) {
+                navState = 'settings-sub-item';
+                nextBtns[0].classList.add('fifotv-focused');
+                nextBtns[0].focus();
+            } else {
+                navState = 'settings-item';
+                visibleItems[settingsItemIndex].classList.add('fifotv-focused');
+                visibleItems[settingsItemIndex].focus();
+            }
+            playSound('hover');
+            e.preventDefault();
+            break;
+        case 'ArrowUp':
+            clearSettingsFocus();
+            settingsSubItemIndex = 0;
+            settingsItemIndex = Math.max(settingsItemIndex - 1, 0);
+            const prevBtns = Array.from(visibleItems[settingsItemIndex].querySelectorAll('.btn-icon'));
+            if (prevBtns.length > 0) {
+                navState = 'settings-sub-item';
+                prevBtns[0].classList.add('fifotv-focused');
+                prevBtns[0].focus();
+            } else {
+                navState = 'settings-item';
+                visibleItems[settingsItemIndex].classList.add('fifotv-focused');
+                visibleItems[settingsItemIndex].focus();
+            }
+            playSound('hover');
             e.preventDefault();
             break;
         case 'Enter':
-            // Activate the focused pill
-            if (currentFocused) currentFocused.click();
+            if (subButtons[settingsSubItemIndex]) {
+                subButtons[settingsSubItemIndex].click();
+            }
             e.preventDefault();
             break;
         case 'Escape':
-            navState = 'grid';
-            document.activeElement.blur();
-            focusedIndex = 0;
-            updateFocus();
+            clearSettingsFocus();
+            navState = 'settings-item';
+            currentItem.classList.add('fifotv-focused');
+            currentItem.focus();
             e.preventDefault();
             break;
     }
@@ -680,32 +788,21 @@ function activateCard(pos) {
     const s = streamings[streamIdx];
     if (s && s.url) {
         trackUsage(s.id);
-        const card = document.querySelector(`.card[data-pos="${pos}"]`);
-        showTransition(s.url, card);
+        showTransition(s);
     }
 }
 
-function showTransition(url, cardEl) {
-    const mostUsed = getMostUsed();
-    const recentsCount = mostUsed.length;
-    let streamIdx;
-    if (focusedIndex < recentsCount) {
-        streamIdx = streamings.findIndex(x => x.id === mostUsed[focusedIndex].id);
-    } else {
-        streamIdx = focusedIndex - recentsCount;
-    }
-    const streaming = streamings[streamIdx];
-
-    // Main process handles loading view + streaming view — just send IPC
+function showTransition(streaming) {
     if (typeof window.fifotv !== 'undefined' && window.fifotv.openStreaming) {
-        window.fifotv.openStreaming(url, streaming ? streaming.name : '', streaming ? streaming.slug : '');
+        window.fifotv.openStreaming(streaming.url, streaming.name, streaming.slug);
     } else {
-        window.location.href = url;
+        window.location.href = streaming.url;
     }
 }
 
 function showAddPopup() {
     const popup = document.getElementById('add-popup');
+    navState = 'add-popup';
     popup.style.width = '420px';
     popup.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
@@ -726,7 +823,7 @@ function showAddPopup() {
             <button id="add-confirm" class="btn-primary">Adicionar</button>
         </div>
     `;
-    popup.classList.remove('hidden');
+    addPopup.show();
 
     const urlInput = document.getElementById('add-url');
     const nameInput = document.getElementById('add-name');
@@ -745,14 +842,15 @@ function showAddPopup() {
         }
     });
 
-    document.getElementById('add-cancel').onclick = () => { popup.classList.add('hidden'); };
+    document.getElementById('add-cancel').onclick = () => { addPopup.hide(false); navState = 'grid'; };
     document.getElementById('add-confirm').onclick = async () => {
         const url = urlInput.value;
         const name = nameInput.value;
         if (url && name) {
             const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
             await window.fifotv.addStreaming({ id: Date.now(), name, slug, url });
-            popup.classList.add('hidden');
+            addPopup.hide(false);
+            navState = 'grid';
             loadStreamings();
             showToast(`${name} adicionado`);
         }
@@ -843,7 +941,7 @@ function showSettingsPopup() {
         </div>
     `;
 
-    popup.classList.remove('hidden');
+    settingsPopup.show();
 
     popup.querySelectorAll('.settings-sidebar-item').forEach(item => {
         item.onclick = () => {
@@ -877,7 +975,7 @@ function showSettingsPopup() {
     });
 
     document.getElementById('btn-add-streaming').onclick = () => {
-        popup.classList.add('hidden');
+        settingsPopup.hide(false);
         showAddPopup();
     };
 
@@ -926,9 +1024,10 @@ async function loadWifiSection() {
 
 function showWifiPasswordModal(ssid) {
     return new Promise((resolve) => {
-        const popup = document.getElementById('add-popup');
-        popup.style.width = '420px';
-        popup.innerHTML = `
+        const el = wifiModal.el;
+        if (!el) { resolve(null); return; }
+        el.style.width = '420px';
+        el.innerHTML = `
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
                 ${ICON.wifi}
                 <h3 style="font-weight:500;font-size:17px;">Conectar em ${ssid}</h3>
@@ -943,7 +1042,8 @@ function showWifiPasswordModal(ssid) {
                 <button id="wifi-pass-confirm" class="btn-primary">Conectar</button>
             </div>
         `;
-        popup.classList.remove('hidden');
+        wifiModal.show();
+        navState = 'wifi-modal';
 
         const input = document.getElementById('wifi-pass-input');
         const cancelBtn = document.getElementById('wifi-pass-cancel');
@@ -956,10 +1056,11 @@ function showWifiPasswordModal(ssid) {
             if (e.key === 'Escape') { cancelBtn.click(); e.preventDefault(); }
         });
 
-        cancelBtn.onclick = () => { popup.classList.add('hidden'); resolve(null); };
+        cancelBtn.onclick = () => { wifiModal.hide(false); navState = 'settings-item'; resolve(null); };
         confirmBtn.onclick = () => {
             const password = input.value;
-            popup.classList.add('hidden');
+            wifiModal.hide(false);
+            navState = 'settings-item';
             resolve(password);
         };
     });
@@ -1291,12 +1392,12 @@ function showContextMenu(e) {
 
     if (isHome) {
         html = `
-            <div class="context-volume">
-                <button class="context-volume-btn" onclick="changeVolume('down')">${ICON.volumeDown}</button>
+            <div class="context-menu-item context-volume-bar-item" data-action="vol-bar">
+                ${ICON.volumeDown}
                 <div class="context-volume-bar">
                     <div class="context-volume-fill" id="ctx-volume-fill" style="width:${currentVolume}%"></div>
                 </div>
-                <button class="context-volume-btn" onclick="changeVolume('up')">${ICON.volumeUp}</button>
+                ${ICON.volumeUp}
             </div>
             <div class="context-menu-item" id="ctx-info-item">
                 ${ICON.info} <span id="ctx-ip-display">Carregando...</span>
@@ -1347,15 +1448,15 @@ function showContextMenu(e) {
 
     // Set navigation state to context menu
     navState = 'context-menu';
-    ctxMenuIndex = 0;
+    popupNav.resetIndex('context-menu');
 
     // Defer positioning to next frame so offsetHeight is computed
     requestAnimationFrame(() => {
         menu.style.left = Math.min(e.clientX || 100, window.innerWidth - 320) + 'px';
         menu.style.top = Math.min(e.clientY || 100, window.innerHeight - menu.offsetHeight - 20) + 'px';
 
-        const firstItem = menu.querySelector('.context-menu-item, .context-volume-btn');
-        if (firstItem) firstItem.style.background = 'rgba(255,255,255,0.12)';
+        const firstItem = menu.querySelector('.context-menu-item');
+        if (firstItem) firstItem.classList.add('fifotv-focused');
     });
 
     if (isHome) loadIPInfo();
@@ -1401,7 +1502,7 @@ function hideContextMenu() {
             ctx.classList.remove('fading-out');
             // Reset highlights
             ctx.querySelectorAll('.context-menu-item, .context-volume-btn').forEach(el => {
-                el.style.background = '';
+                el.classList.remove('fifotv-focused');
             });
         }, 200);
     }
@@ -1411,22 +1512,14 @@ function hideContextMenu() {
 let monitorInterval = null;
 
 function showMonitorPopup() {
-    const popup = document.getElementById('monitor-popup');
-    popup.classList.remove('hidden');
+    monitorPopup.show();
     hideContextMenu();
     fetchMonitorStats();
     monitorInterval = setInterval(fetchMonitorStats, 3000);
 }
 
 function hideMonitorPopup() {
-    const popup = document.getElementById('monitor-popup');
-    if (!popup.classList.contains('hidden')) {
-        popup.classList.add('fading-out');
-        setTimeout(() => {
-            popup.classList.add('hidden');
-            popup.classList.remove('fading-out');
-        }, 200);
-    }
+    monitorPopup.hide();
     clearInterval(monitorInterval);
     monitorInterval = null;
 }
@@ -1455,33 +1548,18 @@ async function fetchMonitorStats() {
 
 function closeAllPopups() {
     hideContextMenu();
-    hideMonitorPopup();
-    
-    // Fade out settings popup
-    const settingsPopup = document.getElementById('settings-popup');
-    if (!settingsPopup.classList.contains('hidden')) {
-        settingsPopup.classList.add('fading-out');
-        setTimeout(() => {
-            settingsPopup.classList.add('hidden');
-            settingsPopup.classList.remove('fading-out');
-            settingsPopup.className = 'popup settings-popup hidden';
-        }, 200);
-    }
-    
-    // Fade out add popup
-    const addPopup = document.getElementById('add-popup');
-    if (!addPopup.classList.contains('hidden')) {
-        addPopup.classList.add('fading-out');
-        setTimeout(() => {
-            addPopup.classList.add('hidden');
-            addPopup.classList.remove('fading-out');
-        }, 200);
-    }
+    monitorPopup.hide();
+    settingsPopup.hide();
+    addPopup.hide();
+    wifiModal.hide();
     
     // Reset navigation state
     navState = 'grid';
-    ctxMenuIndex = 0;
     settingsSectionIndex = 0;
+    settingsSubItemIndex = 0;
+    
+    // Clear all focus highlights
+    document.querySelectorAll('.fifotv-focused').forEach(el => el.classList.remove('fifotv-focused'));
     
     // Hide transition overlay
     const overlay = document.getElementById('transition-overlay');
@@ -1501,7 +1579,9 @@ function resetScreensaverTimers() {
     }, SS_TIMEOUT);
 
     dpmsTimer = setTimeout(() => {
-        // DPMS off not available in Electron
+        if (typeof window.fifotv !== 'undefined' && window.fifotv.screenOff) {
+            window.fifotv.screenOff();
+        }
     }, DPMS_TIMEOUT);
 }
 
@@ -1517,9 +1597,10 @@ document.addEventListener('keyup', (e) => {
             window._backPressStart = null;
             if (elapsed < 600) {
                 const hasPopups = !document.getElementById('context-menu').classList.contains('hidden') ||
-                    !document.getElementById('settings-popup').classList.contains('hidden') ||
-                    !document.getElementById('add-popup').classList.contains('hidden') ||
-                    !document.getElementById('monitor-popup').classList.contains('hidden');
+                    settingsPopup.isVisible() ||
+                    addPopup.isVisible() ||
+                    monitorPopup.isVisible() ||
+                    wifiModal.isVisible();
                 if (hasPopups) {
                     closeAllPopups();
                 } else if (typeof window.fifotv !== 'undefined' && window.fifotv.goHome) {
@@ -1595,6 +1676,10 @@ if (typeof window.fifotv !== 'undefined' && window.fifotv.onGlobalKey) {
         else if (key === 'MediaPlayPause') changeVolume('mute');
         else if (key === 'BrowserHome') { closeAllPopups(); navState = 'grid'; focusedIndex = 0; updateFocus(); }
     });
+}
+
+if (typeof window.fifotv !== 'undefined' && window.fifotv.onScreensaverReset) {
+    window.fifotv.onScreensaverReset(() => resetScreensaverTimers());
 }
 
 applyRandomPalette();

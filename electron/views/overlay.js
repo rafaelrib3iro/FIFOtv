@@ -229,7 +229,9 @@
       document.body.appendChild(menu);
     }
     menu.innerHTML = buildMenuHTML();
-    menu.classList.remove('fifotv-hidden', 'fifotv-fading-out');
+    menu.classList.remove('fifotv-hidden');
+    menu.style.display = '';
+    menu.style.opacity = '1';
 
     const mw = 300, mh = menu.offsetHeight || 340;
     const pad = 12;
@@ -250,11 +252,8 @@
   function hideMenu() {
     const menu = document.getElementById('fifotv-ctx');
     if (!menu || menu.classList.contains('fifotv-hidden')) return;
-    menu.classList.add('fifotv-fading-out');
-    setTimeout(() => {
-      menu.classList.add('fifotv-hidden');
-      menu.classList.remove('fifotv-fading-out');
-    }, 200);
+    menu.classList.add('fifotv-hidden');
+    menu.style.display = 'none';
     menuVisible = false;
     menuFocusIndex = -1;
 

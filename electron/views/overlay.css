@@ -7,6 +7,10 @@
     box-sizing: border-box;
 }
 
+*:focus {
+    outline: none !important;
+}
+
 body {
     background: transparent;
     overflow: hidden;
@@ -33,8 +37,7 @@ body {
     width: 300px;
     padding: 8px 0;
     z-index: 2147483647;
-    animation: fifotv-menu-in 200ms ease-out;
-    transition: opacity 200ms ease, transform 200ms ease;
+    opacity: 1;
     overflow: hidden;
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--fifotv-text-primary);
