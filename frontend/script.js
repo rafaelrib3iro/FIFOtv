@@ -138,6 +138,7 @@ const settingsPopup = new Popup('settings-popup');
 const addPopup = new Popup('add-popup');
 const monitorPopup = new Popup('monitor-popup');
 const wifiModal = new Popup('wifi-modal');
+let activeWifiModal = null;
 
 const popupNav = new PopupNavigator();
 
@@ -396,6 +397,10 @@ function handleKeydown(e) {
     const airMouseMap = {
         'BrowserHome':   () => { closeAllPopups(); navState = 'grid'; focusedIndex = 0; updateFocus(); window.fifotv.goHome(); },
         'ContextMenu':   () => {
+            if (monitorPopup.isVisible()) {
+                hideMonitorPopup();
+                return;
+            }
             const menu = document.getElementById('context-menu');
             if (!menu.classList.contains('hidden')) { hideContextMenu(); }
             else { showContextMenu({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 }); }
@@ -1030,6 +1035,7 @@ async function loadWifiSection() {
 }
 
 function showWifiPasswordModal(ssid) {
+    finishWifiPasswordModal(null);
     return new Promise((resolve) => {
         const el = wifiModal.el;
         if (!el) { resolve(null); return; }
@@ -1052,6 +1058,7 @@ function showWifiPasswordModal(ssid) {
         document.getElementById('wifi-network-name').textContent = ssid;
         wifiModal.show();
         navState = 'wifi-modal';
+        activeWifiModal = { resolve };
 
         const input = document.getElementById('wifi-pass-input');
         const cancelBtn = document.getElementById('wifi-pass-cancel');
@@ -1064,14 +1071,20 @@ function showWifiPasswordModal(ssid) {
             if (e.key === 'Escape') { cancelBtn.click(); e.preventDefault(); }
         });
 
-        cancelBtn.onclick = () => { wifiModal.hide(false); navState = 'settings-item'; resolve(null); };
+        cancelBtn.onclick = () => finishWifiPasswordModal(null);
         confirmBtn.onclick = () => {
-            const password = input.value;
-            wifiModal.hide(false);
-            navState = 'settings-item';
-            resolve(password);
+            finishWifiPasswordModal(input.value);
         };
     });
+}
+
+function finishWifiPasswordModal(value) {
+    if (!activeWifiModal) return;
+    const { resolve } = activeWifiModal;
+    activeWifiModal = null;
+    wifiModal.hide(false);
+    navState = 'settings-item';
+    resolve(value);
 }
 
 async function connectWifi(ssid, security) {
@@ -1102,15 +1115,20 @@ async function loadBluetoothSection() {
             window.fifotv.btStatus(),
             window.fifotv.btScan()
         ]);
-        info.textContent = status.connected ? (status.name || status.mac) : 'Nenhum dispositivo';
+        const connectedDevices = Array.isArray(status.devices)
+            ? status.devices
+            : status.connected ? [status] : [];
+        info.textContent = connectedDevices.length > 1
+            ? `${connectedDevices.length} dispositivos conectados`
+            : status.connected ? (status.name || status.mac) : 'Nenhum dispositivo';
         info.style.color = status.connected ? '#4ade80' : 'var(--text-secondary)';
         list.replaceChildren();
-        if (status.connected) list.appendChild(createBluetoothItem(status, true));
+        connectedDevices.forEach(device => list.appendChild(createBluetoothItem(device, true)));
         if (scan.devices && scan.devices.length > 0) {
-            const paired = status.connected ? status.mac : '';
-            const devices = scan.devices.filter(d => d.mac !== paired);
+            const connectedMacs = new Set(connectedDevices.map(device => device.mac));
+            const devices = scan.devices.filter(device => !connectedMacs.has(device.mac));
             if (devices.length > 0) {
-                if (status.connected) {
+                if (connectedDevices.length > 0) {
                     const divider = document.createElement('div');
                     divider.style.cssText = 'color:var(--text-dim);font-size:12px;margin:12px 0 6px;';
                     divider.textContent = 'Dispositivos próximos:';
@@ -1119,7 +1137,7 @@ async function loadBluetoothSection() {
                 devices.forEach(device => list.appendChild(createBluetoothItem(device, false)));
             }
         }
-        if (!status.connected && (!scan.devices || scan.devices.length === 0)) {
+        if (connectedDevices.length === 0 && (!scan.devices || scan.devices.length === 0)) {
             list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">Nenhum dispositivo encontrado. Ative o pareamento no dispositivo.</div>';
         }
     } catch (e) {
@@ -1548,6 +1566,7 @@ function showMonitorPopup() {
     monitorPopup.show();
     hideContextMenu();
     fetchMonitorStats();
+    clearInterval(monitorInterval);
     monitorInterval = setInterval(fetchMonitorStats, 3000);
 }
 
@@ -1581,10 +1600,10 @@ async function fetchMonitorStats() {
 
 function closeAllPopups() {
     hideContextMenu();
-    monitorPopup.hide();
+    hideMonitorPopup();
     settingsPopup.hide();
     addPopup.hide();
-    wifiModal.hide();
+    finishWifiPasswordModal(null);
     
     // Reset navigation state
     navState = 'grid';
@@ -1647,6 +1666,10 @@ document.addEventListener('mousemove', resetScreensaverTimers);
 document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (monitorPopup.isVisible()) {
+        hideMonitorPopup();
+        return;
+    }
     const menu = document.getElementById('context-menu');
     if (!menu.classList.contains('hidden')) {
         hideContextMenu();

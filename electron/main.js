@@ -8,6 +8,7 @@ const net = require('net');
 const { isCatalog, isMacAddress, isNonEmptyString, isStreaming, isStreamingUrl } = require('./ipc-validation');
 const { readCatalog } = require('./catalog');
 const { clamp, parseNmcliTerse } = require('./system-controls');
+const { isCurrentView } = require('./view-lifecycle');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -40,11 +41,14 @@ let splashView = null;
 let loadingTimer = null;
 let appCommandAttached = false;
 let overlayMenuVisible = false;
+let overlayAttached = false;
 let remoteProcess = null;
 let remoteRunning = false;
 let remoteHealthTimer = null;
 let currentStreamingSlug = null;
 let powerSaveBlockerId = null;
+let streamingGeneration = 0;
+let returningHome = false;
 const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
 const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
 const SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
@@ -106,6 +110,18 @@ function addView(view) {
 function removeView(view) {
   if (!win || win.isDestroyed() || !view) return;
   try { win.contentView.removeChildView(view); } catch {}
+}
+
+function showOverlay() {
+  if (!isOverlayAlive() || !win || win.isDestroyed() || overlayAttached) return;
+  win.contentView.addChildView(overlayView);
+  overlayAttached = true;
+}
+
+function hideOverlay() {
+  if (!overlayAttached) return;
+  removeView(overlayView);
+  overlayAttached = false;
 }
 
 function isAuthorizedSender(event, views) {
@@ -432,6 +448,11 @@ let btAgentRegistered = false;
 
 function btSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function invalidateBtCache() {
+  btAdapter = null;
+  btAgentRegistered = false;
+}
+
 async function waitForBtProperty(bus, devicePath, iface, prop, expected, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -487,6 +508,7 @@ async function registerBtAgent(bus) {
     console.log('[BT] Agent registered');
   } catch (err) {
     console.error('[BT] Agent registration failed:', err.message);
+    btAgentRegistered = false;
   }
 }
 
@@ -520,7 +542,7 @@ async function getBtAdapter() {
     }
   } catch (err) {
     console.error('[BT] getBtAdapter failed:', err.message);
-    btAdapter = null;
+    invalidateBtCache();
   }
   return btAdapter;
 }
@@ -528,41 +550,54 @@ async function getBtAdapter() {
 handleFrom('bt:status', () => [homeView], async () => {
   try {
     const adapter = await getBtAdapter();
-    if (!adapter) return { connected: false, name: '', mac: '' };
+    if (!adapter) return { connected: false, name: '', mac: '', devices: [] };
     const obj = await adapter.bus.getProxyObject('org.bluez', adapter.path);
     const props = obj.getInterface('org.freedesktop.DBus.Properties');
     const powered = await props.Get('org.bluez.Adapter1', 'Powered');
-    if (!powered.value) return { connected: false, name: '', mac: '' };
+    if (!powered.value) return { connected: false, name: '', mac: '', devices: [] };
 
     const managed = await (await adapter.bus.getProxyObject('org.bluez', '/'))
       .getInterface('org.freedesktop.DBus.ObjectManager').GetManagedObjects();
+    const devices = [];
     for (const [path, interfaces] of Object.entries(managed)) {
       if (interfaces['org.bluez.Device1']) {
         const d = interfaces['org.bluez.Device1'];
         const connectedProp = d['Connected'];
         if (connectedProp && connectedProp.value) {
-          return {
-            connected: true,
+          devices.push({
             name: d['Name'] ? d['Name'].value : '',
             mac: d['Address'] ? d['Address'].value : '',
-          };
+          });
         }
       }
     }
-    return { connected: false, name: '', mac: '' };
+    const [first] = devices;
+    return {
+      connected: devices.length > 0,
+      name: first?.name || '',
+      mac: first?.mac || '',
+      devices,
+    };
   } catch (err) {
     console.error('[BT] bt:status failed:', err.message);
-    return { connected: false, name: '', mac: '' };
+    invalidateBtCache();
+    return { connected: false, name: '', mac: '', devices: [] };
   }
 });
 
 handleFrom('bt:scan', () => [homeView], async () => {
+  let adapterIface = null;
+  let props = null;
+  let previousPairable;
+  let previousDiscoverable;
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { devices: [] };
     const obj = await adapter.bus.getProxyObject('org.bluez', adapter.path);
-    const adapterIface = obj.getInterface('org.bluez.Adapter1');
-    const props = obj.getInterface('org.freedesktop.DBus.Properties');
+    adapterIface = obj.getInterface('org.bluez.Adapter1');
+    props = obj.getInterface('org.freedesktop.DBus.Properties');
+    previousPairable = await props.Get('org.bluez.Adapter1', 'Pairable');
+    previousDiscoverable = await props.Get('org.bluez.Adapter1', 'Discoverable');
 
     try { await adapterIface.StopDiscovery(); } catch {}
 
@@ -585,12 +620,21 @@ handleFrom('bt:scan', () => [homeView], async () => {
       }
     }
 
-    try { await adapterIface.StopDiscovery(); } catch {}
-
     return { devices };
   } catch (err) {
     console.error('[BT] bt:scan failed:', err.message);
+    invalidateBtCache();
     return { devices: [] };
+  } finally {
+    if (adapterIface) {
+      try { await adapterIface.StopDiscovery(); } catch {}
+    }
+    if (props && previousPairable) {
+      try { await props.Set('org.bluez.Adapter1', 'Pairable', previousPairable); } catch {}
+    }
+    if (props && previousDiscoverable) {
+      try { await props.Set('org.bluez.Adapter1', 'Discoverable', previousDiscoverable); } catch {}
+    }
   }
 });
 
@@ -635,6 +679,7 @@ handleFrom('bt:connect', () => [homeView], async (_, mac) => {
     return { ok: true };
   } catch (e) {
     console.error('[BT] bt:connect failed:', e.type || e.message);
+    invalidateBtCache();
     return { ok: false, error: e.text || e.message };
   }
 });
@@ -654,6 +699,7 @@ handleFrom('bt:disconnect', () => [homeView], async (_, mac) => {
     return { ok: true };
   } catch (err) {
     console.error('[BT] bt:disconnect failed:', err.message);
+    invalidateBtCache();
     return { ok: false };
   }
 });
@@ -674,6 +720,7 @@ handleFrom('bt:unpair', () => [homeView], async (_, mac) => {
     return { ok: true };
   } catch (e) {
     console.error('[BT] bt:unpair failed:', e.type || e.message);
+    invalidateBtCache();
     return { ok: false, error: e.text || e.message };
   }
 });
@@ -697,9 +744,11 @@ function resetHomeScreensaver() {
 
 function destroyStreamingViews() {
   if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+  streamingGeneration += 1;
+  overlayMenuVisible = false;
 
   if (overlayView) {
-    removeView(overlayView);
+    hideOverlay();
     overlayView.webContents.destroy();
     overlayView = null;
   }
@@ -715,6 +764,35 @@ function destroyStreamingViews() {
     loadingView.webContents.destroy();
     loadingView = null;
   }
+}
+
+function isCurrentStreamingView(view, generation) {
+  return isCurrentView(view, generation, streamingView, streamingGeneration);
+}
+
+function returnHome() {
+  if (returningHome) return;
+  returningHome = true;
+  currentStreamingSlug = null;
+
+  if (powerSaveBlockerId !== null) {
+    powerSaveBlocker.stop(powerSaveBlockerId);
+    powerSaveBlockerId = null;
+  }
+
+  if (appCommandAttached) {
+    win.removeListener('app-command', handleAppCommand);
+    appCommandAttached = false;
+  }
+
+  setImmediate(() => {
+    destroyStreamingViews();
+    returningHome = false;
+    if (homeView && !homeView.webContents.isDestroyed()) {
+      homeView.webContents.focus();
+      resetHomeScreensaver();
+    }
+  });
 }
 
 handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
@@ -745,7 +823,7 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   const isPrimeVideo = url.includes('primevideo.com');
 
   // Create streaming view — loads in background behind loading
-  streamingView = new WebContentsView({
+  const streamView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-streaming.js'),
       contextIsolation: false,
@@ -753,17 +831,19 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
       additionalArguments: [slug],
     }
   });
-  streamingView.setBackgroundColor('#0a0816');
-  streamingView.setBounds({ x: 0, y: 0, width, height });
-  streamingView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  attachRendererLogging(streamingView.webContents, `streaming:${slug}`);
+  streamingView = streamView;
+  const streamGeneration = ++streamingGeneration;
+  streamView.setBackgroundColor('#0a0816');
+  streamView.setBounds({ x: 0, y: 0, width, height });
+  streamView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  attachRendererLogging(streamView.webContents, `streaming:${slug}`);
 
   // TV Identity — User-Agent + Client Hints headers (skip for Prime Video and Netflix)
   const skipTvIdentity = isPrimeVideo || slug === 'netflix';
   if (!skipTvIdentity) {
     const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
-    streamingView.webContents.setUserAgent(SMART_TV_UA);
-    streamingView.webContents.session.webRequest.onBeforeSendHeaders(
+    streamView.webContents.setUserAgent(SMART_TV_UA);
+    streamView.webContents.session.webRequest.onBeforeSendHeaders(
       { urls: ['*://*/*'] },
       (details, callback) => {
         details.requestHeaders['Sec-CH-UA-Platform'] = '"Tizen"';
@@ -778,14 +858,24 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
     );
   }
 
-  streamingView.webContents.loadURL(url);
-  streamingView.webContents.on('did-fail-load', (_, code, desc) => {
+  let loadFailureHandled = false;
+  const recoverStreaming = (reason) => {
+    if (loadFailureHandled || !isCurrentStreamingView(streamView, streamGeneration)) return;
+    loadFailureHandled = true;
+    console.error(`[streaming] returning home after ${reason}`);
+    returnHome();
+  };
+  streamView.webContents.loadURL(url);
+  streamView.webContents.on('did-fail-load', (_, code, desc, failedUrl, isMainFrame) => {
     console.error(`[streaming] failed to load: ${code} ${desc}`);
+    if (code !== -3 && isMainFrame) recoverStreaming(`main-frame load failure: ${failedUrl}`);
   });
+  streamView.webContents.on('render-process-gone', (_, details) => recoverStreaming(`renderer exit: ${details.reason}`));
 
   // Inject spatial navigation polyfill + streaming customizations after dom-ready
-  streamingView.webContents.on('dom-ready', () => {
-    const currentUrl = streamingView.webContents.getURL();
+  streamView.webContents.on('dom-ready', () => {
+    if (!isCurrentStreamingView(streamView, streamGeneration)) return;
+    const currentUrl = streamView.webContents.getURL();
 
     // 1. Inject WICG spatial navigation polyfill
     const SN_CONFIG = getSpatialNavConfig();
@@ -795,7 +885,7 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
         const polyfillCode = fs.readFileSync(
           path.join(__dirname, 'views', 'spatial-navigation', 'polyfill.js'), 'utf8'
         );
-        streamingView.webContents.executeJavaScript(polyfillCode).catch(() => {});
+        streamView.webContents.executeJavaScript(polyfillCode).catch(() => {});
       } catch (err) {
         console.error(`[FIFOtv] Polyfill read ERROR: ${err.message}`);
       }
@@ -804,12 +894,12 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
     // 2. Inject shared utilities + spatial-nav config
     try {
       const sharedCode = fs.readFileSync(path.join(CUSTOM_DIR, 'shared.js'), 'utf8');
-      streamingView.webContents.executeJavaScript(sharedCode).catch(() => {});
+      streamView.webContents.executeJavaScript(sharedCode).catch(() => {});
 
-      streamingView.webContents.executeJavaScript(`window.__FIFOtv_slug = ${JSON.stringify(slug)};`);
+      streamView.webContents.executeJavaScript(`window.__FIFOtv_slug = ${JSON.stringify(slug)};`).catch(() => {});
 
       const spatialNavCode = fs.readFileSync(path.join(CUSTOM_DIR, 'spatial-nav.js'), 'utf8');
-      streamingView.webContents.executeJavaScript(spatialNavCode).catch(() => {});
+      streamView.webContents.executeJavaScript(spatialNavCode).catch(() => {});
     } catch (err) {
       console.error(`[FIFOtv] Shared injection ERROR: ${err.message}`);
     }
@@ -825,7 +915,7 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
     if (scriptFile) {
       try {
         const scriptCode = fs.readFileSync(path.join(CUSTOM_DIR, scriptFile), 'utf8');
-        streamingView.webContents.executeJavaScript(scriptCode).catch(() => {});
+        streamView.webContents.executeJavaScript(scriptCode).catch(() => {});
       } catch (err) {
         console.error(`[FIFOtv] ${scriptFile} read ERROR: ${err.message}`);
       }
@@ -833,8 +923,8 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
 
     // Re-focus streaming view after page loads (Netflix may steal focus)
     setTimeout(() => {
-      if (streamingView && !streamingView.webContents.isDestroyed()) {
-        streamingView.webContents.focus();
+      if (isCurrentStreamingView(streamView, streamGeneration)) {
+        streamView.webContents.focus();
       }
     }, 3000);
   });
@@ -876,13 +966,18 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
 
   // Z-order: homeView (bottom), streamingView (top, receives mouse)
   // overlay is NOT added here — it's added/removed dynamically via IPC handlers
-  addView(streamingView);
+  addView(streamView);
   addView(loadingView);
 
   // After 5s: remove loading, keep streaming + overlay
+  const streamLoadingView = loadingView;
   loadingTimer = setTimeout(() => {
-    removeView(loadingView);
-    if (loadingView) { loadingView.webContents.destroy(); loadingView = null; }
+    if (isCurrentStreamingView(streamView, streamGeneration) && loadingView === streamLoadingView) {
+      removeView(streamLoadingView);
+      if (!streamLoadingView.webContents.isDestroyed()) streamLoadingView.webContents.destroy();
+      loadingView = null;
+    }
+    loadingTimer = null;
   }, 5000);
 
   // Handle BrowserBack via app-command (Linux air mouse) — prevent listener leak
@@ -892,10 +987,10 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   }
 
   // Intercept only ContextMenu + BrowserHome — everything else passes to streaming
-  streamingView.webContents.on('before-input-event', handleBeforeInput);
+  streamView.webContents.on('before-input-event', handleBeforeInput);
 
   // Focus streaming page so it receives keyboard and mouse
-  streamingView.webContents.focus();
+  streamView.webContents.focus();
 
   return { ok: true };
 });
@@ -929,6 +1024,7 @@ function handleBeforeInput(event, input) {
   if (input.key === 'ContextMenu') {
     event.preventDefault();
     const { width: w, height: h } = getViewBounds();
+    showOverlay();
     overlayView.webContents.send('show-menu', { x: w / 2, y: h / 2 });
     return;
   }
@@ -963,29 +1059,7 @@ handleFrom('nav:reload-streaming', () => [overlayView], () => {
 });
 
 handleFrom('nav:go-home', () => [homeView, overlayView], () => {
-  currentStreamingSlug = null;
-
-  // Stop preventing display sleep
-  if (powerSaveBlockerId !== null) {
-    powerSaveBlocker.stop(powerSaveBlockerId);
-    powerSaveBlockerId = null;
-  }
-
-  // Remove app-command listener from win
-  if (appCommandAttached) {
-    win.removeListener('app-command', handleAppCommand);
-    appCommandAttached = false;
-  }
-
-  // Defer destruction — can't destroy the caller's webContents inside its own IPC handler
-  setImmediate(() => {
-    destroyStreamingViews();
-    if (homeView && !homeView.webContents.isDestroyed()) {
-      homeView.webContents.focus();
-      resetHomeScreensaver();
-    }
-  });
-
+  returnHome();
   return { ok: true };
 });
 
@@ -1002,10 +1076,11 @@ handleFrom('overlay:zoom', () => [overlayView], (_, delta) => {
 
 handleFrom('overlay:set-mouse-events', () => [overlayView], (_, ignore) => {
   assertPayload(typeof ignore === 'boolean', 'mouse event flag');
-  if (isOverlayAlive()) {
+  if (isOverlayAlive() && typeof overlayView.webContents.setIgnoreMouseEvents === 'function') {
     overlayView.webContents.setIgnoreMouseEvents(ignore);
+    return { ok: true };
   }
-  return { ok: true };
+  return { ok: false, error: 'Mouse passthrough indisponível neste runtime' };
 });
 
 handleFrom('overlay:focus', () => [overlayView], (_, target) => {
@@ -1026,15 +1101,15 @@ onFrom('overlay:menu-visibility', () => [overlayView], (_, visible) => {
 // Z-order management: bring overlay to front when menu opens, send back when it closes
 // Overlay: add to hierarchy (appears on top of streaming)
 onFrom('overlay:show-menu', () => [overlayView], () => {
-  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  win.contentView.addChildView(overlayView);
+  if (!isOverlayAlive()) return;
+  showOverlay();
   overlayView.webContents.focus();
 });
 
 // Overlay: remove from hierarchy (streaming regains full control)
 onFrom('overlay:hide-menu', () => [overlayView], () => {
-  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  try { win.contentView.removeChildView(overlayView); } catch {}
+  if (!isOverlayAlive()) return;
+  hideOverlay();
   if (streamingView && !streamingView.webContents.isDestroyed()) {
     streamingView.webContents.focus();
   }
@@ -1042,14 +1117,13 @@ onFrom('overlay:hide-menu', () => [overlayView], () => {
 
 // Overlay: add to hierarchy for volume toast (purely visual, no focus change)
 onFrom('overlay:toast-show', () => [overlayView], () => {
-  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  win.contentView.addChildView(overlayView);
+  showOverlay();
 });
 
 // Overlay: remove from hierarchy after volume toast + focus streaming
 onFrom('overlay:toast-hide', () => [overlayView], () => {
-  if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
-  try { win.contentView.removeChildView(overlayView); } catch {}
+  if (!isOverlayAlive()) return;
+  hideOverlay();
   if (streamingView && !streamingView.webContents.isDestroyed()) {
     streamingView.webContents.focus();
   }

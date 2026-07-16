@@ -135,10 +135,9 @@
     const el = document.getElementById('fifotv-monitor');
     if (!el) return;
     el.classList.remove('fifotv-hidden');
-    // Keep overlay capturing mouse for the popup
-    if (window.fifotv && window.fifotv.setMouseEvents) window.fifotv.setMouseEvents(false);
     if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('overlay');
     fetchMonitorStats();
+    clearInterval(monitorInterval);
     monitorInterval = setInterval(fetchMonitorStats, 3000);
   }
 
@@ -148,9 +147,8 @@
     el.classList.add('fifotv-hidden');
     clearInterval(monitorInterval);
     monitorInterval = null;
-    // Return mouse events to streaming page
-    if (window.fifotv && window.fifotv.setMouseEvents) window.fifotv.setMouseEvents(true);
     if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
+    if (window.fifotv && window.fifotv.sendOverlayToBack) window.fifotv.sendOverlayToBack();
   }
 
   async function fetchMonitorStats() {
@@ -248,14 +246,13 @@
     menuFocusIndex = 0;
     updateMenuFocus();
 
-    // Overlay captures mouse + keyboard for menu navigation
-    if (window.fifotv && window.fifotv.setMouseEvents) window.fifotv.setMouseEvents(false);
+    // The overlay is mounted only while it needs to receive input.
     if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('overlay');
     if (window.fifotv && window.fifotv.setMenuVisibility) window.fifotv.setMenuVisibility(true);
     if (window.fifotv && window.fifotv.bringOverlayToFront) window.fifotv.bringOverlayToFront();
   }
 
-  function hideMenu() {
+  function hideMenu({ keepOverlay = false } = {}) {
     const menu = document.getElementById('fifotv-ctx');
     if (!menu || menu.classList.contains('fifotv-hidden')) return;
     menu.classList.add('fifotv-hidden');
@@ -263,12 +260,10 @@
     menuVisible = false;
     menuFocusIndex = -1;
 
-    // Mouse passes through to streaming + streaming gets keyboard focus
-    if (window.fifotv && window.fifotv.setMouseEvents) window.fifotv.setMouseEvents(true);
-    if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
     if (window.fifotv && window.fifotv.setMenuVisibility) window.fifotv.setMenuVisibility(false);
-    // Send overlay back only if toast is not visible
-    if (!toastVisible && window.fifotv && window.fifotv.sendOverlayToBack) {
+    if (!keepOverlay && window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
+    // Send overlay back only if no visible overlay surface needs it.
+    if (!keepOverlay && !toastVisible && window.fifotv && window.fifotv.sendOverlayToBack) {
       window.fifotv.sendOverlayToBack();
     }
   }
@@ -298,7 +293,7 @@
         break;
       case 'monitor':
         showMonitorPopup();
-        hideMenu();
+        hideMenu({ keepOverlay: true });
         break;
       case 'shutdown':
         apiShutdown();
@@ -366,7 +361,8 @@
       hideMenu();
     }
     const monitorEl = document.getElementById('fifotv-monitor');
-    if (monitorEl && !monitorEl.classList.contains('fifotv-hidden') && !e.target.closest('#fifotv-monitor')) {
+    if (monitorEl && !monitorEl.classList.contains('fifotv-hidden')
+      && !e.target.closest('#fifotv-monitor') && !e.target.closest('#fifotv-ctx')) {
       hideMonitorPopup();
     }
   }, true);
@@ -379,20 +375,20 @@
 
     if (type !== 'keyDown') return;
 
-    // ContextMenu key → toggle menu (always)
-    if (key === 'ContextMenu') {
-      if (menuVisible) hideMenu();
-      else showMenu(window.innerWidth / 2, window.innerHeight / 2);
-      return;
-    }
-
-    // When monitor popup is open: BrowserBack/Escape closes it
+    // When monitor popup is open, its close keys must not reopen the menu.
     const monitorEl = document.getElementById('fifotv-monitor');
     if (monitorEl && !monitorEl.classList.contains('fifotv-hidden')) {
-      if (key === 'BrowserBack' || key === 'Escape') {
+      if (key === 'BrowserBack' || key === 'Escape' || key === 'ContextMenu') {
         hideMonitorPopup();
         return;
       }
+      return;
+    }
+
+    // ContextMenu key → toggle menu
+    if (key === 'ContextMenu') {
+      if (menuVisible) hideMenu();
+      else showMenu(window.innerWidth / 2, window.innerHeight / 2);
       return;
     }
 

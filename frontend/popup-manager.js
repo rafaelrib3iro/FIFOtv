@@ -4,21 +4,30 @@ class Popup {
             ? document.getElementById(elementOrId)
             : elementOrId;
         this.animDuration = opts.animDuration || 200;
+        this.hideTimer = null;
     }
 
     show() {
+        clearTimeout(this.hideTimer);
+        this.hideTimer = null;
+        this.el.classList.remove('fading-out');
         this.el.classList.remove('hidden');
     }
 
     hide(animated = true) {
+        clearTimeout(this.hideTimer);
+        this.hideTimer = null;
         if (!animated) {
             this.el.classList.add('hidden');
+            this.el.classList.remove('fading-out');
             return;
         }
+        if (this.el.classList.contains('hidden')) return;
         this.el.classList.add('fading-out');
-        setTimeout(() => {
+        this.hideTimer = setTimeout(() => {
             this.el.classList.add('hidden');
             this.el.classList.remove('fading-out');
+            this.hideTimer = null;
         }, this.animDuration);
     }
 
@@ -99,4 +108,8 @@ class PopupNavigator {
         }
         return false;
     }
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { Popup, PopupNavigator };
 }
