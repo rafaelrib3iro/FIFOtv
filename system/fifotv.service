@@ -9,7 +9,7 @@ Environment=DISPLAY=:0
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 WorkingDirectory=/home/tv/smarttv
-ExecStart=/usr/bin/npm start
+ExecStart=/home/tv/smarttv/node_modules/.bin/electron . --kiosk
 Restart=always
 RestartSec=3
 StandardOutput=journal
