@@ -8,10 +8,10 @@
     youtube: {
       actionFocus: ['ytd-guide-renderer'],
     },
-    disney: {
+    disneyplus: {
       containers: ['.dss-contentWrapper'],
     },
-    max: {
+    hbomax: {
       containers: ['.content-area'],
     },
     appletv: {},

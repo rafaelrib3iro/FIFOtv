@@ -9,6 +9,9 @@ const { isCatalog, isMacAddress, isNonEmptyString, isStreaming, isStreamingUrl }
 const { readCatalog } = require('./catalog');
 const { clamp, parseNmcliTerse } = require('./system-controls');
 const { isCurrentView } = require('./view-lifecycle');
+const { hostnameFromUrl, matchesHostname, resolveCustomScript } = require('./provider-resolution');
+const { redactStreamingUrl, runInjectionStages } = require('./streaming-injection');
+const { createClientHintsRegistry } = require('./client-hints');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -49,10 +52,22 @@ let currentStreamingSlug = null;
 let powerSaveBlockerId = null;
 let streamingGeneration = 0;
 let returningHome = false;
+let removeStreamingClientHints = null;
 const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
 const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
 const SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
 const SPA_DOMAINS = new Set(['youtube']);
+const clientHintsRegistry = createClientHintsRegistry();
+const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
+const SMART_TV_CLIENT_HINTS = {
+  'Sec-CH-UA-Platform': '"Tizen"',
+  'Sec-CH-UA-Mobile': '?0',
+  'Sec-CH-UA': '"Chromium";v="149", "Not_A Brand";v="24"',
+  'Sec-CH-UA-Full-Version-List': '"Chromium";v="149.0.0.0", "Not_A Brand";v="24.0.0.0"',
+  'Sec-CH-UA-Platform-Version': '"6.5.0"',
+  'Sec-CH-UA-Model': '""',
+  'Sec-CH-UA-Form-Factors': '"TV"',
+};
 
 function loadFreshConfig(relativePath) {
   const fullPath = path.join(__dirname, relativePath);
@@ -747,14 +762,17 @@ function destroyStreamingViews() {
   streamingGeneration += 1;
   overlayMenuVisible = false;
 
+  if (removeStreamingClientHints) {
+    removeStreamingClientHints();
+    removeStreamingClientHints = null;
+  }
+
   if (overlayView) {
     hideOverlay();
     overlayView.webContents.destroy();
     overlayView = null;
   }
   if (streamingView) {
-    // Cleanup Client Hints header listener
-    streamingView.webContents.session.webRequest.onBeforeSendHeaders(null);
     removeView(streamingView);
     streamingView.webContents.destroy();
     streamingView = null;
@@ -810,17 +828,16 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
 
   const { width, height } = getViewBounds();
 
-  // YouTube → TV endpoint
-  if (/youtube\.com|youtu\.be/.test(url)) {
-    url = 'https://www.youtube.com/tv';
-  }
-
-  // Normalize URL — add protocol if missing
   if (url && !url.match(/^https?:\/\//i)) {
     url = 'https://' + url;
   }
 
-  const isPrimeVideo = url.includes('primevideo.com');
+  const initialHostname = hostnameFromUrl(url);
+  if (matchesHostname(initialHostname, 'youtube.com') || matchesHostname(initialHostname, 'youtu.be')) {
+    url = 'https://www.youtube.com/tv';
+  }
+
+  const isPrimeVideo = matchesHostname(hostnameFromUrl(url), 'primevideo.com');
 
   // Create streaming view — loads in background behind loading
   const streamView = new WebContentsView({
@@ -841,20 +858,11 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   // TV Identity — User-Agent + Client Hints headers (skip for Prime Video and Netflix)
   const skipTvIdentity = isPrimeVideo || slug === 'netflix';
   if (!skipTvIdentity) {
-    const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
     streamView.webContents.setUserAgent(SMART_TV_UA);
-    streamView.webContents.session.webRequest.onBeforeSendHeaders(
-      { urls: ['*://*/*'] },
-      (details, callback) => {
-        details.requestHeaders['Sec-CH-UA-Platform'] = '"Tizen"';
-        details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
-        details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="149", "Not_A Brand";v="24"';
-        details.requestHeaders['Sec-CH-UA-Full-Version-List'] = '"Chromium";v="149.0.0.0", "Not_A Brand";v="24.0.0.0"';
-        details.requestHeaders['Sec-CH-UA-Platform-Version'] = '"6.5.0"';
-        details.requestHeaders['Sec-CH-UA-Model'] = '""';
-        details.requestHeaders['Sec-CH-UA-Form-Factors'] = '"TV"';
-        callback({ requestHeaders: details.requestHeaders });
-      }
+    removeStreamingClientHints = clientHintsRegistry.register(
+      streamView.webContents.session,
+      streamView.webContents.id,
+      SMART_TV_CLIENT_HINTS
     );
   }
 
@@ -872,54 +880,45 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   });
   streamView.webContents.on('render-process-gone', (_, details) => recoverStreaming(`renderer exit: ${details.reason}`));
 
-  // Inject spatial navigation polyfill + streaming customizations after dom-ready
   streamView.webContents.on('dom-ready', () => {
     if (!isCurrentStreamingView(streamView, streamGeneration)) return;
     const currentUrl = streamView.webContents.getURL();
-
-    // 1. Inject WICG spatial navigation polyfill
+    const redactedUrl = redactStreamingUrl(currentUrl);
     const SN_CONFIG = getSpatialNavConfig();
     const streamConfig = SN_CONFIG[slug] || {};
-    if (streamConfig.enabled !== false) {
+    const scriptSelection = resolveCustomScript(getStreamingConfig(), currentUrl);
+    const stages = [];
+    const addStage = (name, filePath) => {
       try {
-        const polyfillCode = fs.readFileSync(
-          path.join(__dirname, 'views', 'spatial-navigation', 'polyfill.js'), 'utf8'
-        );
-        streamView.webContents.executeJavaScript(polyfillCode).catch(() => {});
-      } catch (err) {
-        console.error(`[FIFOtv] Polyfill read ERROR: ${err.message}`);
+        stages.push({ name, code: fs.readFileSync(filePath, 'utf8') });
+        return true;
+      } catch (error) {
+        console.error(`[streaming] injection failed provider=${slug} stage=${name} url=${redactedUrl}: ${error.message}`);
+        return false;
       }
-    }
+    };
 
-    // 2. Inject shared utilities + spatial-nav config
-    try {
-      const sharedCode = fs.readFileSync(path.join(CUSTOM_DIR, 'shared.js'), 'utf8');
-      streamView.webContents.executeJavaScript(sharedCode).catch(() => {});
+    if (streamConfig.enabled !== false && !addStage('polyfill', path.join(__dirname, 'views', 'spatial-navigation', 'polyfill.js'))) return;
+    if (!addStage('shared', path.join(CUSTOM_DIR, 'shared.js'))) return;
+    stages.push({ name: 'slug', code: `window.__FIFOtv_slug = ${JSON.stringify(slug)};` });
+    if (!addStage('spatial config', path.join(CUSTOM_DIR, 'spatial-nav.js'))) return;
+    if (scriptSelection?.scriptFile && !addStage('provider script', path.join(CUSTOM_DIR, scriptSelection.scriptFile))) return;
 
-      streamView.webContents.executeJavaScript(`window.__FIFOtv_slug = ${JSON.stringify(slug)};`).catch(() => {});
-
-      const spatialNavCode = fs.readFileSync(path.join(CUSTOM_DIR, 'spatial-nav.js'), 'utf8');
-      streamView.webContents.executeJavaScript(spatialNavCode).catch(() => {});
-    } catch (err) {
-      console.error(`[FIFOtv] Shared injection ERROR: ${err.message}`);
-    }
-
-    // 3. Inject streaming-specific customization
-    let scriptFile = null;
-    for (const [domain, file] of Object.entries(getStreamingConfig())) {
-      if (currentUrl.includes(domain)) {
-        scriptFile = file;
-        break;
-      }
-    }
-    if (scriptFile) {
-      try {
-        const scriptCode = fs.readFileSync(path.join(CUSTOM_DIR, scriptFile), 'utf8');
-        streamView.webContents.executeJavaScript(scriptCode).catch(() => {});
-      } catch (err) {
-        console.error(`[FIFOtv] ${scriptFile} read ERROR: ${err.message}`);
-      }
-    }
+    console.log(
+      `[streaming] injection plan provider=${slug} hostname=${hostnameFromUrl(currentUrl) || '[invalid]'} script=${scriptSelection?.scriptFile || 'none'} url=${redactedUrl}`
+    );
+    runInjectionStages({
+      webContents: streamView.webContents,
+      stages,
+      isCurrent: () => isCurrentStreamingView(streamView, streamGeneration),
+      onStageError: (stage, error) => {
+        console.error(`[streaming] injection failed provider=${slug} stage=${stage} url=${redactedUrl}: ${error.message}`);
+      },
+    }).then((result) => {
+      if (result.ok) console.log(`[streaming] injection complete provider=${slug} url=${redactedUrl}`);
+    }).catch((error) => {
+      console.error(`[streaming] injection failed provider=${slug} stage=pipeline url=${redactedUrl}: ${error.message}`);
+    });
 
     // Re-focus streaming view after page loads (Netflix may steal focus)
     setTimeout(() => {
