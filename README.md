@@ -101,10 +101,6 @@ Os comandos principais são:
 | --- | --- |
 | `npm run dev` | Inicia o FIFOtv em modo de desenvolvimento |
 | `npm start` | Inicia o FIFOtv em modo kiosk |
-| `npm test` | Executa os testes automatizados |
-| `npm run check` | Verifica a sintaxe e executa os testes |
-| `npm run build` | Gera um pacote `.deb` |
-| `npm run dist` | Gera um pacote `.AppImage` |
 
 ## Roadmap
 
