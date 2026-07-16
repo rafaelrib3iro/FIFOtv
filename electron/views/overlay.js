@@ -20,7 +20,7 @@
   let menuFocusIndex = -1;
   let toastVisible = false;
 
-  // Menu items: 'home', 'reload', 'zoom-bar', 'vol-bar', 'monitor', 'settings', 'shutdown'
+  // Menu items: 'home', 'reload', 'zoom-bar', 'vol-bar', 'monitor', 'shutdown'
   // Volume bar and zoom bar are single focusable items (D-pad left/right adjusts them)
 
   // ─── VOLUME TOAST ──────────────────────────────────────
@@ -94,12 +94,16 @@
 
   async function apiVolume(action) {
     try {
-      if (action === 'up') await window.fifotv.volumeUp();
-      else if (action === 'down') await window.fifotv.volumeDown();
-      else if (action === 'mute') await window.fifotv.volumeMute();
-    } catch (_) {}
-    if (action === 'up') currentVolume = Math.min(100, currentVolume + 5);
-    else if (action === 'down') currentVolume = Math.max(0, currentVolume - 5);
+      let data;
+      if (action === 'up') data = await window.fifotv.volumeUp();
+      else if (action === 'down') data = await window.fifotv.volumeDown();
+      else if (action === 'mute') data = await window.fifotv.volumeMute();
+      if (!data || !data.ok) throw new Error(data?.error || 'Falha ao alterar o volume');
+      currentVolume = data.volume;
+    } catch (_) {
+      showToast('Não foi possível alterar o volume');
+      return;
+    }
     showVolumeToast();
     updateMenuBars();
   }
@@ -112,10 +116,15 @@
     try { await window.fifotv.restartApp(); } catch (_) {}
   }
 
-  function applyZoom(delta) {
-    currentZoom = Math.max(50, Math.min(150, currentZoom + delta));
-    window.fifotv.zoom(delta);
-    updateMenuBars();
+  async function applyZoom(delta) {
+    try {
+      const data = await window.fifotv.zoom(delta);
+      if (!data || !data.ok) throw new Error(data?.error || 'Falha ao alterar o zoom');
+      currentZoom = data.zoom;
+      updateMenuBars();
+    } catch (_) {
+      showToast('Não foi possível alterar o zoom');
+    }
   }
 
   // ─── MONITOR POPUP ────────────────────────────────────
@@ -156,9 +165,9 @@
       const procVal = document.getElementById('fifotv-monitor-proc-val');
       if (cpuFill) cpuFill.style.width = data.cpu + '%';
       if (cpuVal) cpuVal.textContent = data.cpu + '%';
-      if (ramFill) ramFill.style.width = ((data.ram_used / data.ram_total) * 100) + '%';
+      if (ramFill) ramFill.style.width = (data.ram_total > 0 ? (data.ram_used / data.ram_total) * 100 : 0) + '%';
       if (ramVal) ramVal.textContent = data.ram_used + ' / ' + data.ram_total + ' MB';
-      if (diskFill) diskFill.style.width = ((data.disk_used / data.disk_total) * 100) + '%';
+      if (diskFill) diskFill.style.width = (data.disk_total > 0 ? (data.disk_used / data.disk_total) * 100 : 0) + '%';
       if (diskVal) diskVal.textContent = data.disk_used + ' / ' + data.disk_total + ' MB';
       if (procVal) procVal.textContent = data.processes + ' processos';
     } catch (_) {}
@@ -190,9 +199,6 @@
       </div>
       <div class="fifotv-ctx-item" data-action="monitor">
         ${ICON.monitor} Monitor
-      </div>
-      <div class="fifotv-ctx-item" data-action="settings">
-        ${ICON.settings} Configurações
       </div>
       <div class="fifotv-ctx-item" data-action="shutdown">
         ${ICON.power} Desligar
@@ -292,9 +298,6 @@
         break;
       case 'monitor':
         showMonitorPopup();
-        hideMenu();
-        break;
-      case 'settings':
         hideMenu();
         break;
       case 'shutdown':

@@ -6,6 +6,8 @@ const http = require('http');
 const os = require('os');
 const net = require('net');
 const { isCatalog, isMacAddress, isNonEmptyString, isStreaming, isStreamingUrl } = require('./ipc-validation');
+const { readCatalog } = require('./catalog');
+const { clamp, parseNmcliTerse } = require('./system-controls');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -64,14 +66,11 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('gtk-version', '3'); // Avoid GTK 4 issues on Debian/GNOME
 
 function readStreamings() {
-  try {
-    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
-  } catch {
-    return { streamings: [] };
-  }
+  return readCatalog(() => fs.readFileSync(DATA_PATH, 'utf8'));
 }
 
 function writeStreamings(data) {
+  assertPayload(isCatalog(data), 'catalog');
   fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
 }
 
@@ -237,8 +236,8 @@ handleFrom('system:stats', () => [homeView, overlayView], async () => {
       const lines = memRes.output.trim().split('\n');
       if (lines.length > 1) {
         const parts = lines[1].trim().split(/\s+/);
-        ram_total = Math.round((parseInt(parts[1]) || 0) / 1024);
-        ram_used = Math.round((parseInt(parts[2]) || 0) / 1024);
+        ram_total = parseInt(parts[1]) || 0;
+        ram_used = parseInt(parts[2]) || 0;
       }
     }
 
@@ -354,37 +353,46 @@ handleFrom('logging:set-level', () => [homeView], (_, level) => {
 });
 
 // ─── VOLUME (wpctl) ────────────────────────────────────────
-handleFrom('volume:up', () => [homeView, overlayView], async () => {
-  return run('wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+');
-});
-
-handleFrom('volume:down', () => [homeView, overlayView], async () => {
-  return run('wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-');
-});
-
-handleFrom('volume:mute', () => [homeView, overlayView], async () => {
-  return run('wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle');
-});
-
-handleFrom('volume:get', () => [homeView, overlayView], async () => {
+async function getVolumeState() {
   const res = await run("wpctl get-volume @DEFAULT_AUDIO_SINK@");
   if (res.ok) {
     const match = res.output.match(/Volume:\s*([\d.]+)/);
-    const vol = match ? Math.round(parseFloat(match[1]) * 100) : 50;
+    const vol = match ? clamp(Math.round(parseFloat(match[1]) * 100), 0, 100) : 50;
     const muted = res.output.includes('[MUTED]');
-    return { volume: vol, muted };
+    return { ok: true, volume: vol, muted };
   }
-  return { volume: 50, muted: false };
+  return { ok: false, error: res.output || 'Não foi possível obter o volume' };
+}
+
+async function changeVolume(command) {
+  const result = await run(command);
+  if (!result.ok) return { ok: false, error: result.output || 'Não foi possível alterar o volume' };
+  return getVolumeState();
+}
+
+handleFrom('volume:up', () => [homeView, overlayView], () => {
+  return changeVolume('wpctl set-volume --limit 1 @DEFAULT_AUDIO_SINK@ 5%+');
+});
+
+handleFrom('volume:down', () => [homeView, overlayView], () => {
+  return changeVolume('wpctl set-volume --limit 1 @DEFAULT_AUDIO_SINK@ 5%-');
+});
+
+handleFrom('volume:mute', () => [homeView, overlayView], () => {
+  return changeVolume('wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle');
+});
+
+handleFrom('volume:get', () => [homeView, overlayView], () => {
+  return getVolumeState();
 });
 
 // ─── WIFI (nmcli) ──────────────────────────────────────────
 handleFrom('wifi:status', () => [homeView], async () => {
   const res = await run("nmcli -t -f NAME,TYPE,DEVICE connection show --active");
   if (res.ok) {
-    const wifiLine = res.output.split('\n').find(l => l.includes('802-11-wireless'));
+    const wifiLine = res.output.split('\n').map(parseNmcliTerse).find((fields) => fields[1] === '802-11-wireless');
     if (wifiLine) {
-      const ssid = wifiLine.split(':')[0];
-      return { connected: true, ssid };
+      return { connected: true, ssid: wifiLine[0] };
     }
   }
   return { connected: false, ssid: '' };
@@ -396,7 +404,7 @@ handleFrom('wifi:scan', () => [homeView], async () => {
     const networks = res.output.trim().split('\n')
       .filter(line => line.trim())
       .map(line => {
-        const [ssid, signal, security] = line.split(':');
+        const [ssid, signal, security] = parseNmcliTerse(line);
         return { ssid, signal: parseInt(signal) || 0, security: security || '' };
       })
       .filter(n => n.ssid);
@@ -984,10 +992,12 @@ handleFrom('nav:go-home', () => [homeView, overlayView], () => {
 handleFrom('overlay:zoom', () => [overlayView], (_, delta) => {
   assertPayload(typeof delta === 'number' && Number.isFinite(delta), 'zoom delta');
   if (streamingView && !streamingView.webContents.isDestroyed()) {
-    const zoom = streamingView.webContents.getZoomLevel();
-    streamingView.webContents.setZoomLevel(zoom + (delta > 0 ? 0.5 : -0.5));
+    const current = Math.round(streamingView.webContents.getZoomFactor() * 100);
+    const zoom = clamp(current + delta, 50, 150);
+    streamingView.webContents.setZoomFactor(zoom / 100);
+    return { ok: true, zoom };
   }
-  return { ok: true };
+  return { ok: false, error: 'Streaming indisponível' };
 });
 
 handleFrom('overlay:set-mouse-events', () => [overlayView], (_, ignore) => {

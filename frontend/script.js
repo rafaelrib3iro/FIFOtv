@@ -207,23 +207,13 @@ function updateClock() {
     document.getElementById('screensaver-date').textContent = dateStr;
 }
 
-const DEFAULT_STREAMINGS = [
-    { id: 1, name: "Netflix",      slug: "netflix",      url: "https://netflix.com" },
-    { id: 2, name: "YouTube",      slug: "youtube",      url: "https://youtube.com/tv" },
-    { id: 3, name: "Prime Video",  slug: "primevideo",   url: "https://primevideo.com" },
-    { id: 4, name: "Disney+",      slug: "disneyplus",   url: "https://disneyplus.com" },
-    { id: 5, name: "Spotify",      slug: "spotify",      url: "https://open.spotify.com" },
-    { id: 6, name: "Apple TV",     slug: "appletv",      url: "https://tv.apple.com" },
-    { id: 7, name: "Max",          slug: "hbomax",       url: "https://max.com" },
-    { id: 8, name: "Nuvio",        slug: "nuvio",        url: "https://web.nuvioapp.space/" }
-];
-
 async function loadStreamings() {
     try {
         const data = await window.fifotv.getStreamings();
         streamings = data.streamings;
     } catch (e) {
-        streamings = DEFAULT_STREAMINGS;
+        streamings = [];
+        showToast('Não foi possível carregar o catálogo de streamings');
     }
     renderGrid();
 }
@@ -232,6 +222,8 @@ function renderGrid() {
     const recentsGrid = document.getElementById('recents-grid');
     const mainGrid = document.getElementById('grid');
     const recentsSection = document.getElementById('recents-section');
+    const focusedCard = document.querySelector(`.card[data-pos="${focusedIndex}"]`);
+    const focusedStreamingId = focusedCard ? Number(focusedCard.dataset.streamingId) : null;
     recentsGrid.innerHTML = '';
     mainGrid.innerHTML = '';
 
@@ -241,12 +233,10 @@ function renderGrid() {
 
     // Render Mais Usados
     mostUsed.forEach((s, i) => {
-        const realIndex = streamings.findIndex(x => x.id === s.id);
         const card = document.createElement('div');
         card.className = 'card card-sm';
         card.dataset.pos = i;
-        card.dataset.index = realIndex;
-        card.dataset.url = s.url;
+        card.dataset.streamingId = s.id;
         const icon = document.createElement('div');
         icon.className = 'card-icon';
         appendStreamingIcon(icon, s);
@@ -256,15 +246,13 @@ function renderGrid() {
 
     // Render main grid (streamings + add button)
     const totalSlots = 12;
-    const addIndex = streamings.length;
 
     streamings.forEach((s, i) => {
         const pos = recentsCount + i;
         const card = document.createElement('div');
         card.className = 'card card-sm';
         card.dataset.pos = pos;
-        card.dataset.index = i;
-        card.dataset.url = s.url;
+        card.dataset.streamingId = s.id;
         const icon = document.createElement('div');
         icon.className = 'card-icon';
         appendStreamingIcon(icon, s);
@@ -279,7 +267,7 @@ function renderGrid() {
     const addCard = document.createElement('div');
     addCard.className = 'card card-sm card-add';
     addCard.dataset.pos = recentsCount + streamings.length;
-    addCard.dataset.index = addIndex;
+    addCard.dataset.action = 'add';
     const addIcon = document.createElement('div');
     addIcon.className = 'card-icon';
     addIcon.textContent = '+';
@@ -292,6 +280,11 @@ function renderGrid() {
         emptyCard.className = 'card card-sm card-empty';
         emptyCard.dataset.pos = recentsCount + i;
         mainGrid.appendChild(emptyCard);
+    }
+
+    if (Number.isSafeInteger(focusedStreamingId)) {
+        const matchingCard = document.querySelector(`.card[data-streaming-id="${focusedStreamingId}"]`);
+        if (matchingCard) focusedIndex = Number(matchingCard.dataset.pos);
     }
 
     // Click handlers for all cards
@@ -796,28 +789,19 @@ function handleSettingsSubItemNav(e) {
 
 function activateCard(pos) {
     playSound('select');
-    const mostUsed = getMostUsed();
-    const recentsCount = mostUsed.length;
+    const card = document.querySelector(`.card[data-pos="${pos}"]`);
+    if (!card) return;
 
-    // Add button
-    if (pos === recentsCount + streamings.length) {
+    if (card.dataset.action === 'add') {
         showAddPopup();
         return;
     }
 
-    // Map flat position to streaming index
-    let streamIdx;
-    if (pos < recentsCount) {
-        const s = mostUsed[pos];
-        streamIdx = streamings.findIndex(x => x.id === s.id);
-    } else {
-        streamIdx = pos - recentsCount;
-    }
-
-    if (streamIdx < 0 || streamIdx >= streamings.length) return;
-    const s = streamings[streamIdx];
+    const id = Number(card.dataset.streamingId);
+    const s = window.FIFOtvCardResolution.resolveStreamingById(streamings, id);
     if (s && s.url) {
         trackUsage(s.id);
+        renderGrid();
         showTransition(s);
     }
 }
@@ -911,9 +895,7 @@ function showSettingsPopup() {
         { id: 'streamings', icon: ICON.tv, label: 'Streamings' },
         { id: 'wifi', icon: ICON.wifi, label: 'Wi-Fi' },
         { id: 'bluetooth', icon: ICON.bluetooth, label: 'Bluetooth' },
-        { id: 'system', icon: ICON.monitor, label: 'Sistema' },
-        { id: 'remote', icon: ICON.globe, label: 'Acesso Remoto' },
-        { id: 'cache', icon: ICON.trash, label: 'Dados e Cache' }
+        { id: 'system', icon: ICON.monitor, label: 'Sistema' }
     ];
 
     popup.innerHTML = `
@@ -953,32 +935,6 @@ function showSettingsPopup() {
                 <button class="system-btn" onclick="window.fifotv.shutdown()">${ICON.power} Desligar máquina</button>
                 <button class="system-btn" onclick="window.fifotv.reboot()">${ICON.refresh} Reiniciar máquina</button>
                 <button class="system-btn" onclick="window.fifotv.restartApp()">${ICON.globe} Reiniciar FIFOtv</button>
-                <button class="system-btn" onclick="updateApp()">${ICON.download} Atualizar app</button>
-            </div>
-            <div class="settings-section ${settingsSection === 'remote' ? 'active' : ''}" id="section-remote">
-                <div class="settings-section-title">Acesso Remoto</div>
-                <div class="info-grid" style="margin-bottom:20px;">
-                    <span class="info-label">Status:</span>
-                    <span class="info-value" id="remote-status">Verificando...</span>
-                    <span class="info-label">IP local:</span>
-                    <span class="info-value" id="remote-ip">Carregando...</span>
-                    <span class="info-label">Porta:</span>
-                    <span class="info-value" id="remote-port">3000</span>
-                    <span class="info-label">Hostname:</span>
-                    <span class="info-value" id="remote-hostname">Carregando...</span>
-                </div>
-                <button class="system-btn" id="btn-toggle-remote">${ICON.monitor} <span id="remote-btn-label">Ativar Acesso Remoto</span></button>
-                <div style="margin-top:16px;padding:14px 18px;border-radius:28px;background:rgba(255,255,255,0.04);border:1px solid var(--pill-border);">
-                    <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
-                        Permite acessar esta interface remotamente via navegador web.
-                        O OpenCode Web será iniciado com IP fixo na porta 3000.<br><br>
-                        <strong style="color:var(--text-primary);">Acesso SSH:</strong> ssh usuario@${'{IP}'}
-                    </div>
-                </div>
-            </div>
-            <div class="settings-section ${settingsSection === 'cache' ? 'active' : ''}" id="section-cache">
-                <div class="settings-section-title">Dados e Cache</div>
-                <div id="cache-list"></div>
             </div>
         </div>
     `;
@@ -1006,8 +962,6 @@ function showSettingsPopup() {
                 if (newEl) newEl.classList.add('active');
                 // Re-render content for the new section
                 if (newSection === 'streamings') renderStreamingsList();
-                if (newSection === 'cache') renderCacheList();
-                if (newSection === 'remote') loadRemoteStatus();
                 if (newSection === 'wifi') loadWifiSection();
                 if (newSection === 'bluetooth') loadBluetoothSection();
                 // Fade in
@@ -1021,11 +975,7 @@ function showSettingsPopup() {
         showAddPopup();
     };
 
-    document.getElementById('btn-toggle-remote').onclick = () => toggleRemoteAccess();
-
     renderStreamingsList();
-    loadRemoteStatus();
-    renderCacheList();
     if (settingsSection === 'wifi') loadWifiSection();
     if (settingsSection === 'bluetooth') loadBluetoothSection();
 }
@@ -1403,37 +1353,6 @@ async function loadSystemInfo() {
     }
 }
 
-function renderCacheList() {
-    const list = document.getElementById('cache-list');
-    if (!list) return;
-    list.replaceChildren();
-    streamings.forEach((streaming) => {
-        const item = createStreamingListItem(streaming);
-        item.querySelector('.streaming-item-url').remove();
-        item.appendChild(createStreamingAction('Limpar cache', ICON.trash, () => clearSiteCache(streaming.url), true));
-        list.appendChild(item);
-    });
-}
-
-async function clearSiteCache(url) {
-    showToast('Cache limpo');
-}
-
-async function updateApp() {
-    showToast('Atualizando...');
-    try {
-        const data = await window.fifotv.updateApp();
-        if (data.ok) {
-            showToast('Atualização concluída! Reiniciando...');
-            setTimeout(() => window.fifotv.restartApp(), 2000);
-        } else {
-            showToast('Falha: ' + (data.error || 'Erro desconhecido'));
-        }
-    } catch (e) {
-        showToast('Erro ao atualizar');
-    }
-}
-
 function showToast(message) {
     playSound('notification');
     let container = document.querySelector('.toast-container');
@@ -1489,38 +1408,6 @@ function showVolumeToast() {
             }, 250);
         }
     }, 2000);
-}
-
-async function loadRemoteStatus() {
-    try {
-        const data = await window.fifotv.remoteStatus();
-        const statusEl = document.getElementById('remote-status');
-        const ipEl = document.getElementById('remote-ip');
-        const portEl = document.getElementById('remote-port');
-        const hostnameEl = document.getElementById('remote-hostname');
-        const btnLabel = document.getElementById('remote-btn-label');
-        if (statusEl) statusEl.textContent = data.running ? 'Ativo' : 'Inativo';
-        if (statusEl) statusEl.style.color = data.running ? '#4ade80' : 'var(--text-secondary)';
-        if (ipEl) ipEl.textContent = data.ip || 'N/A';
-        if (portEl) portEl.textContent = data.port || '3000';
-        if (hostnameEl) hostnameEl.textContent = data.hostname || 'N/A';
-        if (btnLabel) btnLabel.textContent = data.running ? 'Desativar Acesso Remoto' : 'Ativar Acesso Remoto';
-    } catch (e) {
-        const statusEl = document.getElementById('remote-status');
-        if (statusEl) statusEl.textContent = 'Indisponível';
-    }
-}
-
-async function toggleRemoteAccess() {
-    try {
-        const result = await window.fifotv.remoteToggle();
-        await loadRemoteStatus();
-        if (result && result.error) {
-            showToast('Erro: ' + result.error);
-        }
-    } catch (e) {
-        showToast('Erro ao ativar acesso remoto');
-    }
 }
 
 let currentVolume = 50;
@@ -1615,14 +1502,17 @@ async function loadIPInfo() {
 
 async function changeVolume(action) {
     try {
-        if (action === 'up') await window.fifotv.volumeUp();
-        else if (action === 'down') await window.fifotv.volumeDown();
-        else if (action === 'mute') await window.fifotv.volumeMute();
+        let data;
+        if (action === 'up') data = await window.fifotv.volumeUp();
+        else if (action === 'down') data = await window.fifotv.volumeDown();
+        else if (action === 'mute') data = await window.fifotv.volumeMute();
+        if (!data || !data.ok) throw new Error(data?.error || 'Falha ao alterar o volume');
+        currentVolume = data.volume;
     } catch (e) {
         console.error('[FIFOtv] changeVolume error:', e);
+        showToast('Não foi possível alterar o volume');
+        return;
     }
-    if (action === 'up') currentVolume = Math.min(100, currentVolume + 5);
-    else if (action === 'down') currentVolume = Math.max(0, currentVolume - 5);
     const fill = document.getElementById('ctx-volume-fill');
     if (fill) fill.style.width = currentVolume + '%';
     showVolumeToast();
@@ -1678,9 +1568,9 @@ async function fetchMonitorStats() {
         const diskVal = document.getElementById('monitor-disk-val');
         if (cpuFill) cpuFill.style.width = data.cpu + '%';
         if (cpuVal) cpuVal.textContent = data.cpu + '%';
-        if (ramFill) ramFill.style.width = ((data.ram_used / data.ram_total) * 100) + '%';
+        if (ramFill) ramFill.style.width = (data.ram_total > 0 ? (data.ram_used / data.ram_total) * 100 : 0) + '%';
         if (ramVal) ramVal.textContent = data.ram_used + ' / ' + data.ram_total + ' MB';
-        if (diskFill) diskFill.style.width = ((data.disk_used / data.disk_total) * 100) + '%';
+        if (diskFill) diskFill.style.width = (data.disk_total > 0 ? (data.disk_used / data.disk_total) * 100 : 0) + '%';
         if (diskVal) diskVal.textContent = data.disk_used + ' / ' + data.disk_total + ' MB';
         const procVal = document.getElementById('monitor-proc-val');
         if (procVal) procVal.textContent = data.processes + ' processos';
@@ -1825,11 +1715,19 @@ if (typeof window.fifotv !== 'undefined' && window.fifotv.onScreensaverReset) {
     window.fifotv.onScreensaverReset(() => resetScreensaverTimers());
 }
 
+async function initVolume() {
+    try {
+        const data = await window.fifotv.getVolume();
+        if (data.ok) currentVolume = data.volume;
+    } catch (_) {}
+}
+
 applyRandomPalette();
 updateClock();
 setInterval(updateClock, 1000);
 loadUsageCounts();
 loadStreamings();
+initVolume();
 resetScreensaverTimers();
 updateBluetoothPill();
 setInterval(updateBluetoothPill, 30000);

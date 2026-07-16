@@ -11,7 +11,6 @@ contextBridge.exposeInMainWorld('fifotv', {
   shutdown: () => ipcRenderer.invoke('system:shutdown'),
   reboot: () => ipcRenderer.invoke('system:reboot'),
   restartApp: () => ipcRenderer.invoke('system:restart'),
-  updateApp: () => ipcRenderer.invoke('system:update'),
   getStats: () => ipcRenderer.invoke('system:stats'),
   getInfo: () => ipcRenderer.invoke('system:info'),
 
@@ -37,16 +36,10 @@ contextBridge.exposeInMainWorld('fifotv', {
   openStreaming: (url, name, slug) => ipcRenderer.invoke('nav:open-streaming', url, name, slug),
   goHome: () => ipcRenderer.invoke('nav:go-home'),
 
-  // Acesso Remoto
-  remoteStatus: () => ipcRenderer.invoke('remote:status'),
-  remoteToggle: () => ipcRenderer.invoke('remote:toggle'),
-
   // Display
   screenOff: () => ipcRenderer.invoke('system:screen-off'),
 
   // Eventos do main process
-  onVolumeChange: (cb) => ipcRenderer.on('volume:changed', (_, data) => cb(data)),
-  onBtStatusChange: (cb) => ipcRenderer.on('bt:status-changed', (_, data) => cb(data)),
   onGlobalKey: (cb) => ipcRenderer.on('global-key', (_, key) => cb(key)),
   onScreensaverReset: (cb) => ipcRenderer.on('screensaver:reset', () => cb()),
 });
