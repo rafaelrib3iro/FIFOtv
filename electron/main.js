@@ -1,10 +1,11 @@
 const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, shell, screen, session, components, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec, spawn } = require('child_process');
+const { exec, execFile, spawn } = require('child_process');
 const http = require('http');
 const os = require('os');
 const net = require('net');
+const { isCatalog, isMacAddress, isNonEmptyString, isStreaming, isStreamingUrl } = require('./ipc-validation');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -82,6 +83,14 @@ function run(cmd) {
   });
 }
 
+function runFile(command, args) {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 10000 }, (err, stdout, stderr) => {
+      resolve({ ok: !err, output: stdout || stderr || '' });
+    });
+  });
+}
+
 function getViewBounds() {
   if (!screen) return { width: 1280, height: 720 };
   const { width, height } = screen.getPrimaryDisplay().bounds;
@@ -100,42 +109,82 @@ function removeView(view) {
   try { win.contentView.removeChildView(view); } catch {}
 }
 
+function isAuthorizedSender(event, views) {
+  return views.some((view) => view && !view.webContents.isDestroyed()
+    && event.sender === view.webContents
+    && event.senderFrame === event.sender.mainFrame);
+}
+
+function handleFrom(channel, getViews, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isAuthorizedSender(event, getViews())) {
+      throw new Error(`Unauthorized IPC sender for ${channel}`);
+    }
+    return handler(event, ...args);
+  });
+}
+
+function onFrom(channel, getViews, listener) {
+  ipcMain.on(channel, (event, ...args) => {
+    if (!isAuthorizedSender(event, getViews())) return;
+    listener(event, ...args);
+  });
+}
+
+function protectLocalView(view) {
+  view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  view.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) {
+      event.preventDefault();
+      console.warn(`[FIFOtv] Blocked local view navigation to ${url}`);
+    }
+  });
+}
+
+function assertPayload(condition, message) {
+  if (!condition) throw new TypeError(`Invalid IPC payload: ${message}`);
+}
+
 // ─── STREAMINGS ────────────────────────────────────────────
-ipcMain.handle('streamings:get', () => {
+handleFrom('streamings:get', () => [homeView], () => {
   return readStreamings();
 });
 
-ipcMain.handle('streamings:add', (_, data) => {
+handleFrom('streamings:add', () => [homeView], (_, data) => {
+  assertPayload(isStreaming(data), 'streaming');
   const db = readStreamings();
+  assertPayload(!db.streamings.some((streaming) => streaming.id === data.id), 'duplicate streaming id');
   db.streamings.push(data);
   writeStreamings(db);
   return { ok: true };
 });
 
-ipcMain.handle('streamings:remove', (_, id) => {
+handleFrom('streamings:remove', () => [homeView], (_, id) => {
+  assertPayload(Number.isSafeInteger(id), 'streaming id');
   const db = readStreamings();
   db.streamings = db.streamings.filter(s => s.id !== id);
   writeStreamings(db);
   return { ok: true };
 });
 
-ipcMain.handle('streamings:reorder', (_, data) => {
+handleFrom('streamings:reorder', () => [homeView], (_, data) => {
+  assertPayload(isCatalog(data), 'catalog');
   writeStreamings(data);
   return { ok: true };
 });
 
 // ─── SYSTEM ────────────────────────────────────────────────
-ipcMain.handle('system:shutdown', () => {
+handleFrom('system:shutdown', () => [homeView, overlayView], () => {
   exec('shutdown -h now');
   return { ok: true };
 });
 
-ipcMain.handle('system:reboot', () => {
+handleFrom('system:reboot', () => [homeView], () => {
   exec('shutdown -r now');
   return { ok: true };
 });
 
-ipcMain.handle('system:restart', () => {
+handleFrom('system:restart', () => [homeView, overlayView], () => {
   setTimeout(() => {
     app.relaunch();
     app.exit(0);
@@ -143,7 +192,7 @@ ipcMain.handle('system:restart', () => {
   return { ok: true };
 });
 
-ipcMain.handle('system:update', () => {
+handleFrom('system:update', () => [homeView], () => {
   const scriptPath = path.join(__dirname, '..', 'scripts', 'update.sh');
   if (!fs.existsSync(scriptPath)) {
     return { ok: false, error: 'Script de atualização não encontrado' };
@@ -161,7 +210,7 @@ ipcMain.handle('system:update', () => {
   });
 });
 
-ipcMain.handle('system:stats', async () => {
+handleFrom('system:stats', () => [homeView, overlayView], async () => {
   try {
     const cpuRes1 = await run("grep 'cpu ' /proc/stat");
     await new Promise(r => setTimeout(r, 300));
@@ -213,7 +262,7 @@ ipcMain.handle('system:stats', async () => {
   }
 });
 
-ipcMain.handle('system:info', () => {
+handleFrom('system:info', () => [homeView, overlayView], () => {
   const interfaces = os.networkInterfaces();
   let ip = '127.0.0.1';
   for (const name of Object.keys(interfaces)) {
@@ -227,7 +276,7 @@ ipcMain.handle('system:info', () => {
   return { ip, hostname: os.hostname() };
 });
 
-ipcMain.handle('system:screen-off', () => {
+handleFrom('system:screen-off', () => [homeView], () => {
   exec('xset dpms force off');
   return { ok: true };
 });
@@ -282,43 +331,42 @@ function attachRendererLogging(webContents, label) {
 }
 
 // IPC: runtime logging control
-ipcMain.handle('logging:get-status', () => ({
+handleFrom('logging:get-status', () => [homeView], () => ({
   fileEnabled: logConfig.enabled,
   level: logConfig.level,
   file: logConfig.file,
   consoleOutput: logConfig.consoleOutput
 }));
 
-ipcMain.handle('logging:set-enabled', (_, enabled) => {
+handleFrom('logging:set-enabled', () => [homeView], (_, enabled) => {
+  assertPayload(typeof enabled === 'boolean', 'logging enabled');
   logConfig.enabled = enabled;
   fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
   return { ok: true, message: `Logging ${enabled ? 'enabled' : 'disabled'}. Restart app to apply.` };
 });
 
-ipcMain.handle('logging:set-level', (_, level) => {
+handleFrom('logging:set-level', () => [homeView], (_, level) => {
   const validLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
-  if (!validLevels.includes(level)) {
-    return { ok: false, error: `Invalid level. Use: ${validLevels.join(', ')}` };
-  }
+  assertPayload(validLevels.includes(level), 'logging level');
   logConfig.level = level;
   fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
   return { ok: true, message: `Log level set to ${level}. Restart app to apply.` };
 });
 
 // ─── VOLUME (wpctl) ────────────────────────────────────────
-ipcMain.handle('volume:up', async () => {
+handleFrom('volume:up', () => [homeView, overlayView], async () => {
   return run('wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+');
 });
 
-ipcMain.handle('volume:down', async () => {
+handleFrom('volume:down', () => [homeView, overlayView], async () => {
   return run('wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-');
 });
 
-ipcMain.handle('volume:mute', async () => {
+handleFrom('volume:mute', () => [homeView, overlayView], async () => {
   return run('wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle');
 });
 
-ipcMain.handle('volume:get', async () => {
+handleFrom('volume:get', () => [homeView, overlayView], async () => {
   const res = await run("wpctl get-volume @DEFAULT_AUDIO_SINK@");
   if (res.ok) {
     const match = res.output.match(/Volume:\s*([\d.]+)/);
@@ -330,7 +378,7 @@ ipcMain.handle('volume:get', async () => {
 });
 
 // ─── WIFI (nmcli) ──────────────────────────────────────────
-ipcMain.handle('wifi:status', async () => {
+handleFrom('wifi:status', () => [homeView], async () => {
   const res = await run("nmcli -t -f NAME,TYPE,DEVICE connection show --active");
   if (res.ok) {
     const wifiLine = res.output.split('\n').find(l => l.includes('802-11-wireless'));
@@ -342,7 +390,7 @@ ipcMain.handle('wifi:status', async () => {
   return { connected: false, ssid: '' };
 });
 
-ipcMain.handle('wifi:scan', async () => {
+handleFrom('wifi:scan', () => [homeView], async () => {
   const res = await run("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list --rescan yes");
   if (res.ok) {
     const networks = res.output.trim().split('\n')
@@ -357,8 +405,12 @@ ipcMain.handle('wifi:scan', async () => {
   return { networks: [] };
 });
 
-ipcMain.handle('wifi:connect', async (_, ssid, password) => {
-  const res = await run(`nmcli dev wifi connect "${ssid}" password "${password}"`);
+handleFrom('wifi:connect', () => [homeView], async (_, ssid, password) => {
+  assertPayload(isNonEmptyString(ssid), 'SSID');
+  assertPayload(password === undefined || typeof password === 'string', 'Wi-Fi password');
+  const args = ['dev', 'wifi', 'connect', ssid];
+  if (password !== undefined) args.push('password', password);
+  const res = await runFile('nmcli', args);
   return { ok: res.ok, output: res.output };
 });
 
@@ -465,7 +517,7 @@ async function getBtAdapter() {
   return btAdapter;
 }
 
-ipcMain.handle('bt:status', async () => {
+handleFrom('bt:status', () => [homeView], async () => {
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { connected: false, name: '', mac: '' };
@@ -496,7 +548,7 @@ ipcMain.handle('bt:status', async () => {
   }
 });
 
-ipcMain.handle('bt:scan', async () => {
+handleFrom('bt:scan', () => [homeView], async () => {
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { devices: [] };
@@ -534,7 +586,8 @@ ipcMain.handle('bt:scan', async () => {
   }
 });
 
-ipcMain.handle('bt:connect', async (_, mac) => {
+handleFrom('bt:connect', () => [homeView], async (_, mac) => {
+  assertPayload(isMacAddress(mac), 'Bluetooth MAC address');
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { ok: false, error: 'No adapter' };
@@ -578,7 +631,8 @@ ipcMain.handle('bt:connect', async (_, mac) => {
   }
 });
 
-ipcMain.handle('bt:disconnect', async (_, mac) => {
+handleFrom('bt:disconnect', () => [homeView], async (_, mac) => {
+  assertPayload(isMacAddress(mac), 'Bluetooth MAC address');
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { ok: false };
@@ -596,7 +650,8 @@ ipcMain.handle('bt:disconnect', async (_, mac) => {
   }
 });
 
-ipcMain.handle('bt:unpair', async (_, mac) => {
+handleFrom('bt:unpair', () => [homeView], async (_, mac) => {
+  assertPayload(isMacAddress(mac), 'Bluetooth MAC address');
   try {
     const adapter = await getBtAdapter();
     if (!adapter) return { ok: false, error: 'No adapter' };
@@ -654,7 +709,10 @@ function destroyStreamingViews() {
   }
 }
 
-ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
+handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
+  assertPayload(isStreamingUrl(url), 'streaming URL');
+  assertPayload(isNonEmptyString(name), 'streaming name');
+  assertPayload(typeof slug === 'string' && /^[a-z0-9][a-z0-9-]*$/i.test(slug), 'streaming slug');
   if (streamingView) return { ok: false, error: 'streaming already open' };
   currentStreamingSlug = slug;
   overlayMenuVisible = false;
@@ -799,6 +857,7 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   });
   overlayView.setBackgroundColor('#00000000');
   overlayView.setBounds({ x: 0, y: 0, width, height });
+  protectLocalView(overlayView);
   overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
   attachRendererLogging(overlayView.webContents, 'overlay');
 
@@ -888,14 +947,14 @@ function handleBeforeInput(event, input) {
   }
 }
 
-ipcMain.handle('nav:reload-streaming', () => {
+handleFrom('nav:reload-streaming', () => [overlayView], () => {
   if (streamingView && !streamingView.webContents.isDestroyed()) {
     streamingView.webContents.reload();
   }
   return { ok: true };
 });
 
-ipcMain.handle('nav:go-home', () => {
+handleFrom('nav:go-home', () => [homeView, overlayView], () => {
   currentStreamingSlug = null;
 
   // Stop preventing display sleep
@@ -922,7 +981,8 @@ ipcMain.handle('nav:go-home', () => {
   return { ok: true };
 });
 
-ipcMain.handle('overlay:zoom', (_, delta) => {
+handleFrom('overlay:zoom', () => [overlayView], (_, delta) => {
+  assertPayload(typeof delta === 'number' && Number.isFinite(delta), 'zoom delta');
   if (streamingView && !streamingView.webContents.isDestroyed()) {
     const zoom = streamingView.webContents.getZoomLevel();
     streamingView.webContents.setZoomLevel(zoom + (delta > 0 ? 0.5 : -0.5));
@@ -930,14 +990,16 @@ ipcMain.handle('overlay:zoom', (_, delta) => {
   return { ok: true };
 });
 
-ipcMain.handle('overlay:set-mouse-events', (_, ignore) => {
+handleFrom('overlay:set-mouse-events', () => [overlayView], (_, ignore) => {
+  assertPayload(typeof ignore === 'boolean', 'mouse event flag');
   if (isOverlayAlive()) {
     overlayView.webContents.setIgnoreMouseEvents(ignore);
   }
   return { ok: true };
 });
 
-ipcMain.handle('overlay:focus', (_, target) => {
+handleFrom('overlay:focus', () => [overlayView], (_, target) => {
+  assertPayload(target === 'overlay' || target === 'streaming', 'focus target');
   if (target === 'overlay' && isOverlayAlive()) {
     overlayView.webContents.focus();
   } else if (target === 'streaming' && streamingView && !streamingView.webContents.isDestroyed()) {
@@ -946,20 +1008,21 @@ ipcMain.handle('overlay:focus', (_, target) => {
   return { ok: true };
 });
 
-ipcMain.on('overlay:menu-visibility', (_, visible) => {
+onFrom('overlay:menu-visibility', () => [overlayView], (_, visible) => {
+  if (typeof visible !== 'boolean') return;
   overlayMenuVisible = visible;
 });
 
 // Z-order management: bring overlay to front when menu opens, send back when it closes
 // Overlay: add to hierarchy (appears on top of streaming)
-ipcMain.on('overlay:show-menu', () => {
+onFrom('overlay:show-menu', () => [overlayView], () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
   win.contentView.addChildView(overlayView);
   overlayView.webContents.focus();
 });
 
 // Overlay: remove from hierarchy (streaming regains full control)
-ipcMain.on('overlay:hide-menu', () => {
+onFrom('overlay:hide-menu', () => [overlayView], () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
   try { win.contentView.removeChildView(overlayView); } catch {}
   if (streamingView && !streamingView.webContents.isDestroyed()) {
@@ -968,13 +1031,13 @@ ipcMain.on('overlay:hide-menu', () => {
 });
 
 // Overlay: add to hierarchy for volume toast (purely visual, no focus change)
-ipcMain.on('overlay:toast-show', () => {
+onFrom('overlay:toast-show', () => [overlayView], () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
   win.contentView.addChildView(overlayView);
 });
 
 // Overlay: remove from hierarchy after volume toast + focus streaming
-ipcMain.on('overlay:toast-hide', () => {
+onFrom('overlay:toast-hide', () => [overlayView], () => {
   if (!overlayView || overlayView.webContents.isDestroyed() || !win) return;
   try { win.contentView.removeChildView(overlayView); } catch {}
   if (streamingView && !streamingView.webContents.isDestroyed()) {
@@ -1126,7 +1189,7 @@ function getLocalIP() {
   return '127.0.0.1';
 }
 
-ipcMain.handle('remote:status', () => {
+handleFrom('remote:status', () => [homeView], () => {
   return {
     running: remoteRunning,
     ip: getLocalIP(),
@@ -1135,7 +1198,7 @@ ipcMain.handle('remote:status', () => {
   };
 });
 
-ipcMain.handle('remote:toggle', async () => {
+handleFrom('remote:toggle', () => [homeView], async () => {
   if (remoteRunning) {
     await stopRemoteProcess();
     const s = loadSettings();
@@ -1228,6 +1291,7 @@ app.whenReady().then(async () => {
 
     const { width: w, height: h } = getViewBounds();
     homeView.setBounds({ x: 0, y: 0, width: w, height: h });
+    protectLocalView(homeView);
     homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
     attachRendererLogging(homeView.webContents, 'home');
 

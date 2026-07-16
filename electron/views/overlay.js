@@ -277,8 +277,8 @@
   function handleAction(action) {
     switch (action) {
       case 'home':
-        window.fifotv.goHome();
         hideMenu();
+        window.fifotv.goHome();
         break;
       case 'reload':
         window.fifotv.reloadStreaming();

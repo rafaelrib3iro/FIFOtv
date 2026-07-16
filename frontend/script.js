@@ -239,13 +239,6 @@ function renderGrid() {
     const recentsCount = mostUsed.length;
     recentsSection.style.display = recentsCount > 0 ? '' : 'none';
 
-    function makeCardHtml(s) {
-        if (s.slug) {
-            return `<img src="assets/icons/${s.slug}.svg" alt="${s.name}" onerror="this.onerror=null;this.src='https://cdn.simpleicons.org/${s.slug}/white';this.onerror=function(){this.outerHTML='<span class=\\'fallback\\'>${s.name[0]}</span>'}">`;
-        }
-        return `<span class="fallback">${s.name[0]}</span>`;
-    }
-
     // Render Mais Usados
     mostUsed.forEach((s, i) => {
         const realIndex = streamings.findIndex(x => x.id === s.id);
@@ -254,7 +247,10 @@ function renderGrid() {
         card.dataset.pos = i;
         card.dataset.index = realIndex;
         card.dataset.url = s.url;
-        card.innerHTML = `<div class="card-icon">${makeCardHtml(s)}</div>`;
+        const icon = document.createElement('div');
+        icon.className = 'card-icon';
+        appendStreamingIcon(icon, s);
+        card.appendChild(icon);
         recentsGrid.appendChild(card);
     });
 
@@ -269,7 +265,13 @@ function renderGrid() {
         card.dataset.pos = pos;
         card.dataset.index = i;
         card.dataset.url = s.url;
-        card.innerHTML = `<div class="card-icon">${makeCardHtml(s)}</div><div class="card-title">${s.name}</div>`;
+        const icon = document.createElement('div');
+        icon.className = 'card-icon';
+        appendStreamingIcon(icon, s);
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = s.name;
+        card.append(icon, title);
         mainGrid.appendChild(card);
     });
 
@@ -278,7 +280,10 @@ function renderGrid() {
     addCard.className = 'card card-sm card-add';
     addCard.dataset.pos = recentsCount + streamings.length;
     addCard.dataset.index = addIndex;
-    addCard.innerHTML = `<div class="card-icon">+</div>`;
+    const addIcon = document.createElement('div');
+    addIcon.className = 'card-icon';
+    addIcon.textContent = '+';
+    addCard.appendChild(addIcon);
     mainGrid.appendChild(addCard);
 
     // Empty slots
@@ -299,6 +304,30 @@ function renderGrid() {
     });
 
     updateFocus();
+}
+
+function appendStreamingIcon(container, streaming, imageStyle = '') {
+    const fallback = () => {
+        const label = document.createElement('span');
+        label.className = 'fallback';
+        label.textContent = streaming.name ? streaming.name[0] : '?';
+        container.replaceChildren(label);
+    };
+
+    if (!streaming.slug) {
+        fallback();
+        return;
+    }
+
+    const image = document.createElement('img');
+    image.src = `assets/icons/${encodeURIComponent(streaming.slug)}.svg`;
+    image.alt = streaming.name || streaming.slug;
+    image.style.cssText = imageStyle;
+    image.addEventListener('error', () => {
+        image.src = `https://cdn.simpleicons.org/${encodeURIComponent(streaming.slug)}/white`;
+        image.addEventListener('error', fallback, { once: true });
+    }, { once: true });
+    container.appendChild(image);
 }
 
 function updateFocus() {
@@ -832,14 +861,14 @@ function showAddPopup() {
 
     urlInput.addEventListener('input', () => {
         const url = urlInput.value.trim();
-        if (!url) { preview.innerHTML = '<span style="font-size:24px;color:var(--text-dim);">?</span>'; return; }
+        if (!url) { setAddPreview(preview); return; }
         try {
             const hostname = new URL(url.startsWith('http') ? url : 'https://' + url).hostname.replace('www.', '');
             const slug = hostname.split('.')[0];
-            preview.innerHTML = `<img src="assets/icons/${slug}.svg" alt="${slug}" style="width:48px;height:48px;filter:brightness(0) invert(1);" onerror="this.onerror=null;this.src='https://cdn.simpleicons.org/${slug}/white';this.onerror=function(){this.parentElement.innerHTML='<span style=\\'font-size:20px;color:var(--text-dim);\\'>${slug[0].toUpperCase()}</span>'}">`;
+            setAddPreview(preview, slug);
             if (!nameInput.value) nameInput.value = slug.charAt(0).toUpperCase() + slug.slice(1);
         } catch (e) {
-            preview.innerHTML = '<span style="font-size:24px;color:var(--text-dim);">?</span>';
+            setAddPreview(preview);
         }
     });
 
@@ -856,6 +885,18 @@ function showAddPopup() {
             showToast(`${name} adicionado`);
         }
     };
+}
+
+function setAddPreview(preview, slug) {
+    preview.replaceChildren();
+    if (!slug) {
+        const placeholder = document.createElement('span');
+        placeholder.textContent = '?';
+        placeholder.style.cssText = 'font-size:24px;color:var(--text-dim);';
+        preview.appendChild(placeholder);
+        return;
+    }
+    appendStreamingIcon(preview, { name: slug[0].toUpperCase(), slug }, 'width:48px;height:48px;filter:brightness(0) invert(1);');
 }
 
 let settingsSection = 'streamings';
@@ -1003,17 +1044,32 @@ async function loadWifiSection() {
         info.textContent = status.connected ? status.ssid : 'Desconectado';
         info.style.color = status.connected ? '#4ade80' : '#f87171';
         if (scan.networks && scan.networks.length > 0) {
-            list.innerHTML = scan.networks.map(n => `
-                <div class="streaming-item" style="cursor:pointer;" tabindex="0" onclick="connectWifi('${n.ssid.replace(/'/g, "\\'")}')">
-                    <div class="streaming-item-icon" style="background:${n.signal > 60 ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${n.signal > 60 ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
-                        ${ICON.wifi}
-                    </div>
-                    <div class="streaming-item-info">
-                        <div class="streaming-item-name">${n.ssid}</div>
-                        <div class="streaming-item-url">${n.security || 'Aberta'} · ${n.signal}%</div>
-                    </div>
-                </div>
-            `).join('');
+            list.replaceChildren();
+            scan.networks.forEach((network) => {
+                const item = document.createElement('div');
+                item.className = 'streaming-item';
+                item.tabIndex = 0;
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => connectWifi(network.ssid, network.security));
+
+                const icon = document.createElement('div');
+                icon.className = 'streaming-item-icon';
+                const strongSignal = network.signal > 60;
+                icon.style.cssText = `background:${strongSignal ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${strongSignal ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;`;
+                icon.innerHTML = ICON.wifi;
+
+                const details = document.createElement('div');
+                details.className = 'streaming-item-info';
+                const name = document.createElement('div');
+                name.className = 'streaming-item-name';
+                name.textContent = network.ssid;
+                const security = document.createElement('div');
+                security.className = 'streaming-item-url';
+                security.textContent = `${network.security || 'Aberta'} · ${network.signal}%`;
+                details.append(name, security);
+                item.append(icon, details);
+                list.appendChild(item);
+            });
         } else {
             list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">Nenhuma rede encontrada</div>';
         }
@@ -1031,7 +1087,7 @@ function showWifiPasswordModal(ssid) {
         el.innerHTML = `
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
                 ${ICON.wifi}
-                <h3 style="font-weight:500;font-size:17px;">Conectar em ${ssid}</h3>
+                <h3 style="font-weight:500;font-size:17px;">Conectar em <span id="wifi-network-name"></span></h3>
             </div>
             <div style="margin-bottom:20px;">
                 <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:8px;">Senha</label>
@@ -1043,6 +1099,7 @@ function showWifiPasswordModal(ssid) {
                 <button id="wifi-pass-confirm" class="btn-primary">Conectar</button>
             </div>
         `;
+        document.getElementById('wifi-network-name').textContent = ssid;
         wifiModal.show();
         navState = 'wifi-modal';
 
@@ -1067,9 +1124,10 @@ function showWifiPasswordModal(ssid) {
     });
 }
 
-async function connectWifi(ssid) {
-    const password = await showWifiPasswordModal(ssid);
-    if (password === null || password === undefined) return;
+async function connectWifi(ssid, security) {
+    const isOpenNetwork = !security || security === '--';
+    const password = isOpenNetwork ? undefined : await showWifiPasswordModal(ssid);
+    if (!isOpenNetwork && (password === null || password === undefined)) return;
     try {
         const data = await window.fifotv.wifiConnect(ssid, password);
         if (data.ok) {
@@ -1096,48 +1154,19 @@ async function loadBluetoothSection() {
         ]);
         info.textContent = status.connected ? (status.name || status.mac) : 'Nenhum dispositivo';
         info.style.color = status.connected ? '#4ade80' : 'var(--text-secondary)';
-        if (status.connected) {
-            list.innerHTML = `
-                <div class="streaming-item" tabindex="0">
-                    <div class="streaming-item-icon" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
-                        ${ICON.bluetooth}
-                    </div>
-                    <div class="streaming-item-info">
-                        <div class="streaming-item-name">${status.name || status.mac}</div>
-                        <div class="streaming-item-url">${status.mac}</div>
-                    </div>
-                    <div class="streaming-item-actions">
-                        <button class="btn-icon" title="Esquecer" onclick="unpairBluetooth('${status.mac}')" style="color:#f87171;">
-                            ${ICON.trash}
-                        </button>
-                        <button class="btn-icon" title="Desconectar" onclick="disconnectBluetooth('${status.mac}')" style="color:#fbbf24;">
-                            ${ICON.x}
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
+        list.replaceChildren();
+        if (status.connected) list.appendChild(createBluetoothItem(status, true));
         if (scan.devices && scan.devices.length > 0) {
             const paired = status.connected ? status.mac : '';
             const devices = scan.devices.filter(d => d.mac !== paired);
             if (devices.length > 0) {
-                const divider = status.connected ? '<div style="color:var(--text-dim);font-size:12px;margin:12px 0 6px;">Dispositivos próximos:</div>' : '';
-                list.innerHTML += divider + devices.map(d => `
-                    <div class="streaming-item" tabindex="0">
-                        <div class="streaming-item-icon" style="background:rgba(255,255,255,0.06);border:1px solid var(--pill-border);min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;">
-                            ${ICON.bluetooth}
-                        </div>
-                        <div class="streaming-item-info">
-                            <div class="streaming-item-name">${d.name || d.mac}</div>
-                            <div class="streaming-item-url">${d.mac}</div>
-                        </div>
-                        <div class="streaming-item-actions">
-                            <button class="btn-icon" title="Conectar" onclick="connectBluetooth('${d.mac}')" style="color:var(--text-secondary);">
-                                ${ICON.monitor}
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
+                if (status.connected) {
+                    const divider = document.createElement('div');
+                    divider.style.cssText = 'color:var(--text-dim);font-size:12px;margin:12px 0 6px;';
+                    divider.textContent = 'Dispositivos próximos:';
+                    list.appendChild(divider);
+                }
+                devices.forEach(device => list.appendChild(createBluetoothItem(device, false)));
             }
         }
         if (!status.connected && (!scan.devices || scan.devices.length === 0)) {
@@ -1147,6 +1176,56 @@ async function loadBluetoothSection() {
         info.textContent = 'Erro ao carregar';
         list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;">Falha ao escanear dispositivos</div>';
     }
+}
+
+function createBluetoothItem(device, connected) {
+    const item = document.createElement('div');
+    item.className = 'streaming-item';
+    item.tabIndex = 0;
+
+    const icon = document.createElement('div');
+    icon.className = 'streaming-item-icon';
+    icon.style.cssText = `background:${connected ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${connected ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;`;
+    icon.innerHTML = ICON.bluetooth;
+
+    const details = document.createElement('div');
+    details.className = 'streaming-item-info';
+    const name = document.createElement('div');
+    name.className = 'streaming-item-name';
+    name.textContent = device.name || device.mac;
+    const mac = document.createElement('div');
+    mac.className = 'streaming-item-url';
+    mac.textContent = device.mac;
+    details.append(name, mac);
+
+    const actions = document.createElement('div');
+    actions.className = 'streaming-item-actions';
+    if (connected) {
+        const unpair = document.createElement('button');
+        unpair.className = 'btn-icon';
+        unpair.title = 'Esquecer';
+        unpair.style.color = '#f87171';
+        unpair.innerHTML = ICON.trash;
+        unpair.addEventListener('click', () => unpairBluetooth(device.mac));
+        const disconnect = document.createElement('button');
+        disconnect.className = 'btn-icon';
+        disconnect.title = 'Desconectar';
+        disconnect.style.color = '#fbbf24';
+        disconnect.innerHTML = ICON.x;
+        disconnect.addEventListener('click', () => disconnectBluetooth(device.mac));
+        actions.append(unpair, disconnect);
+    } else {
+        const connect = document.createElement('button');
+        connect.className = 'btn-icon';
+        connect.title = 'Conectar';
+        connect.style.color = 'var(--text-secondary)';
+        connect.innerHTML = ICON.monitor;
+        connect.addEventListener('click', () => connectBluetooth(device.mac));
+        actions.appendChild(connect);
+    }
+
+    item.append(icon, details, actions);
+    return item;
 }
 
 async function connectBluetooth(mac) {
@@ -1213,22 +1292,55 @@ async function updateBluetoothPill() {
 function renderStreamingsList() {
     const list = document.getElementById('streamings-list');
     if (!list) return;
-    list.innerHTML = streamings.map(s => `
-        <div class="streaming-item" data-id="${s.id}" tabindex="0">
-            <div class="streaming-item-icon">
-                <img src="assets/icons/${s.slug}.svg" alt="${s.name}" onerror="this.style.display='none'">
-            </div>
-            <div class="streaming-item-info">
-                <div class="streaming-item-name">${s.name}</div>
-                <div class="streaming-item-url">${s.url}</div>
-            </div>
-            <div class="streaming-item-actions">
-                <button class="btn-icon" title="Mover acima" onclick="moveStreaming(${s.id}, -1)">${ICON.chevronUp}</button>
-                <button class="btn-icon" title="Mover abaixo" onclick="moveStreaming(${s.id}, 1)">${ICON.chevronDown}</button>
-                <button class="btn-icon danger" title="Remover" onclick="removeStreaming(${s.id})">${ICON.x}</button>
-            </div>
-        </div>
-    `).join('');
+    list.replaceChildren();
+    streamings.forEach((streaming) => {
+        const item = createStreamingListItem(streaming);
+        const actions = document.createElement('div');
+        actions.className = 'streaming-item-actions';
+        actions.append(
+            createStreamingAction('Mover acima', ICON.chevronUp, () => moveStreaming(streaming.id, -1)),
+            createStreamingAction('Mover abaixo', ICON.chevronDown, () => moveStreaming(streaming.id, 1)),
+            createStreamingAction('Remover', ICON.x, () => removeStreaming(streaming.id), true)
+        );
+        item.appendChild(actions);
+        list.appendChild(item);
+    });
+}
+
+function createStreamingListItem(streaming) {
+    const item = document.createElement('div');
+    item.className = 'streaming-item';
+    item.dataset.id = streaming.id;
+    item.tabIndex = 0;
+
+    const icon = document.createElement('div');
+    icon.className = 'streaming-item-icon';
+    const image = document.createElement('img');
+    image.src = `assets/icons/${encodeURIComponent(streaming.slug)}.svg`;
+    image.alt = streaming.name;
+    image.addEventListener('error', () => { image.style.display = 'none'; }, { once: true });
+    icon.appendChild(image);
+
+    const details = document.createElement('div');
+    details.className = 'streaming-item-info';
+    const name = document.createElement('div');
+    name.className = 'streaming-item-name';
+    name.textContent = streaming.name;
+    const url = document.createElement('div');
+    url.className = 'streaming-item-url';
+    url.textContent = streaming.url;
+    details.append(name, url);
+    item.append(icon, details);
+    return item;
+}
+
+function createStreamingAction(title, icon, action, danger = false) {
+    const button = document.createElement('button');
+    button.className = `btn-icon${danger ? ' danger' : ''}`;
+    button.title = title;
+    button.innerHTML = icon;
+    button.addEventListener('click', action);
+    return button;
 }
 
 async function moveStreaming(id, direction) {
@@ -1239,15 +1351,41 @@ async function moveStreaming(id, direction) {
     await window.fifotv.reorderStreamings({ streamings });
     renderStreamingsList();
     renderGrid();
+    focusStreamingSettingsAction(newIdx, direction > 0 ? 1 : 0);
     showToast('Ordem alterada');
 }
 
 async function removeStreaming(id) {
+    const removedIndex = streamings.findIndex(s => s.id === id);
     await window.fifotv.removeStreaming(id);
     streamings = streamings.filter(s => s.id !== id);
     renderStreamingsList();
     renderGrid();
+    focusStreamingSettingsAction(removedIndex, 2);
     showToast('Streaming removido');
+}
+
+function focusStreamingSettingsAction(itemIndex, actionIndex) {
+    const section = document.getElementById('section-streamings');
+    const items = section ? Array.from(section.querySelectorAll('.streaming-item')) : [];
+    clearSettingsFocus();
+
+    if (items.length === 0) {
+        const addButton = document.getElementById('btn-add-streaming');
+        if (!addButton) return;
+        settingsItemIndex = 0;
+        navState = 'settings-item';
+        addButton.classList.add('fifotv-focused');
+        addButton.focus();
+        return;
+    }
+
+    settingsItemIndex = Math.max(0, Math.min(itemIndex, items.length - 1));
+    const actions = items[settingsItemIndex].querySelectorAll('.btn-icon');
+    settingsSubItemIndex = Math.min(actionIndex, actions.length - 1);
+    navState = 'settings-sub-item';
+    actions[settingsSubItemIndex].classList.add('fifotv-focused');
+    actions[settingsSubItemIndex].focus();
 }
 
 async function loadSystemInfo() {
@@ -1268,17 +1406,13 @@ async function loadSystemInfo() {
 function renderCacheList() {
     const list = document.getElementById('cache-list');
     if (!list) return;
-    list.innerHTML = streamings.map(s => `
-        <div class="streaming-item" tabindex="0">
-            <div class="streaming-item-icon">
-                <img src="assets/icons/${s.slug}.svg" alt="${s.name}" onerror="this.style.display='none'">
-            </div>
-            <div class="streaming-item-info">
-                <div class="streaming-item-name">${s.name}</div>
-            </div>
-            <button class="btn-icon danger" title="Limpar cache" onclick="clearSiteCache('${s.url}')">${ICON.trash}</button>
-        </div>
-    `).join('');
+    list.replaceChildren();
+    streamings.forEach((streaming) => {
+        const item = createStreamingListItem(streaming);
+        item.querySelector('.streaming-item-url').remove();
+        item.appendChild(createStreamingAction('Limpar cache', ICON.trash, () => clearSiteCache(streaming.url), true));
+        list.appendChild(item);
+    });
 }
 
 async function clearSiteCache(url) {
@@ -1310,10 +1444,13 @@ function showToast(message) {
     }
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `
-        <div class="toast-icon">${ICON.infoCircle}</div>
-        <span class="toast-text">${message}</span>
-    `;
+    const icon = document.createElement('div');
+    icon.className = 'toast-icon';
+    icon.innerHTML = ICON.infoCircle;
+    const text = document.createElement('span');
+    text.className = 'toast-text';
+    text.textContent = message;
+    toast.append(icon, text);
     container.appendChild(toast);
     setTimeout(() => {
         toast.classList.add('removing');
