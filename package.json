@@ -1,6 +1,7 @@
 {
   "name": "fifotv",
   "version": "2.0.0",
+  "license": "GPL-3.0-only",
   "description": "FIFOtv — Smart TV kiosk",
   "main": "electron/main.js",
   "scripts": {
