@@ -1716,7 +1716,7 @@ Registro em 16 de julho de 2026, na branch `refactor/electron-foundation`:
 | Updater e canal de atualização | Os scripts atuais pertencem a gerações distintas; corrigir exige estratégia de release, rollback e branch | Definição do fluxo oficial de distribuição e rollback |
 | Empacotamento `.deb`/AppImage | Requer recursos no pacote, lockfile, paths graváveis e smoke test de artefato | Primeiro release instalável fora do checkout |
 | Migração completa para `app.getPath('userData')` | Exige schema, migração idempotente, backup, rollback e testes com dados reais | Empacotamento, múltiplos aparelhos ou primeiro upgrade de dados versionado |
-| Limpeza física do legado Flask/Python/Chromium/Openbox | Remoção em bloco pode apagar `backend/streamings.json`, ainda ativo | Inventário aprovado e branch/tag de preservação do legado |
+| Limpeza física do legado Flask/Python/Chromium/Openbox | Concluída em branch dedicada, preservando `backend/streamings.json` | Estado anterior preservado pela tag `electron-foundation-before-repository-cleanup` |
 | OpenCode como produto | Nesta fase ele permanece preservado como ferramenta condicionada ao desenvolvimento; autenticação, bind público, TLS, ownership e supervisor de produto não pertencem à fundação atual | Decisão explícita de transformar o acesso remoto em funcionalidade suportada para usuários finais |
 | Spoofing e identidade por provider | Efeitos em UI, login, DRM e antiabuso não podem ser inferidos estaticamente | Baseline por provider, contas de teste e necessidade funcional reproduzida |
 | Endurecimento amplo das customizações externas | Seletores e lifecycle são específicos e mudam com terceiros | Falha reproduzida em um provider ou ciclo dedicado de compatibilidade |

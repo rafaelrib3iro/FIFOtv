@@ -1,8 +1,10 @@
 ---
 plan name: session4-controls-identity
 plan description: D-pad injection + TV identity
-plan status: active
+plan status: archived
 ---
+
+Plano concluído e arquivado. Referências à extensão Chromium removida podem ser consultadas na tag `electron-foundation-before-repository-cleanup`.
 
 ## Idea
 

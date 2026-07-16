@@ -1,6 +1,6 @@
 # FIFOtv v2 — Bugs Reportados
 
-> Registro histórico de reproduções e correções. Não use este arquivo isoladamente como inventário do runtime atual. A fonte aprovada é `docs/ACTIVE_RUNTIME_SCOPE.md`; alguns relatos abaixo citam arquivos operacionais, extensão Chromium ou implementações que hoje estão inativas.
+> Registro histórico de reproduções e correções. Não use este arquivo isoladamente como inventário do runtime atual. A fonte aprovada é `docs/ACTIVE_RUNTIME_SCOPE.md`; referências a fontes removidas permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
 
 ## Status
 
@@ -109,7 +109,7 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 
 **Descrição:** O popup de configurações tem uma aba/seção "Extensões" que não faz sentido na v2, pois não existem mais extensões Chrome instaladas.
 
-**Causa:** Seção herdada da v1 (Chromium + extensão tv-override). Na v2, tudo é nativo no Electron.
+**Causa:** Seção herdada da v1 (Chromium + extensão tv-override). Na v2, tudo é nativo no Electron; a extensão foi removida na limpeza física do repositório.
 
 **Fix:** Removido a seção "Extensões" do settings popup. Removido ícone `ICON.extensions`, menu item, seção HTML, chamadas `renderExtensionsList()`, `DEFAULT_EXTENSIONS` array, `renderExtensionsList()` e `toggleExtension()`.
 
@@ -188,7 +188,7 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 5. Timer de idle: 3s sem mouse → `fifotv-cursor-idle` → `cursor: none`
 6. Electron agora tem controle total do cursor
 
-**Arquivos:** `electron/main.js`, `frontend/style.css`, `electron/views/overlay.css`, `frontend/assets/cursors/`, `system/.xinitrc`, `update.sh`, `system/scripts/restart.sh`, `system/install/configure.sh`, `system/install/setup.sh`
+**Arquivos atuais:** `electron/main.js`, `frontend/style.css`, `electron/views/overlay.css`, `frontend/assets/cursors/`, `system/.xinitrc`, `update.sh`, `system/install/configure.sh`, `system/install/setup.sh`. O antigo `system/scripts/restart.sh` está preservado apenas no checkpoint pré-limpeza.
 
 ---
 
@@ -231,7 +231,7 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 
 **Nota:** Navegação D-pad no Prime Video ainda é ruim (interface desktop) — será resolvido em sessão futura.
 
-**Arquivos:** `electron/views/streaming-customizations/config.js`, `electron/views/streaming-customizations/primevideo.js`
+**Arquivo atual:** `electron/views/streaming-customizations/config.js`. O script específico desabilitado foi removido e permanece disponível no checkpoint pré-limpeza.
 
 ---
 

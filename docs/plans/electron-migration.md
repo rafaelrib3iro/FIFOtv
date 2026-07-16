@@ -1,8 +1,10 @@
 ---
 plan name: electron-migration
 plan description: Migrate FIFOtv from Chromium+Flask to Electron
-plan status: active
+plan status: archived
 ---
+
+Migração concluída. As fontes da geração anterior citadas abaixo estão preservadas na tag `electron-foundation-before-repository-cleanup`.
 
 ## Idea
 Migrar o projeto FIFOtv do stack v1 (Chromium + Flask + Openbox + extensão Chrome) para v2 (Electron). O Electron substitui Chromium, Openbox, Flask e a extensão Chrome num único runtime. A homepage HTML/CSS/JS existente é reutilizada com chamadas IPC em vez de HTTP fetch. Serviços de Bluetooth e Wi-Fi migram de subprocess+PTY para D-Bus nativo (dbus-next). Menu contexto e overlays usam BrowserView transparente sobre streams. D-pad e controles remotos usam globalShortcut + before-input-event para nunca perder foco. O all-in-one Positivo UD3630 continua funcionando com git pull && npm start.

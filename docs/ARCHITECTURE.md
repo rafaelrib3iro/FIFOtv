@@ -196,7 +196,7 @@ URLs em logs explícitos removem credenciais, query e fragment. `net::ERR_ABORTE
 
 `scripts/dev.sh`, `scripts/keytest.js`, `frontend/keytest.html` e `test/` são ferramentas de desenvolvimento/diagnóstico, não componentes do produto.
 
-OpenCode também é classificado exclusivamente como ferramenta de desenvolvimento. Ele não aparece na home nem nos preloads normais. Por decisão explícita do usuário, o comportamento atual foi preservado: `config/settings.json` pode habilitar seu auto-start por `remoteEnabled`, cujo padrão é `false`. Nesta máquina de desenvolvimento o arquivo local não rastreado contém `true`. Não foi adicionada a condição `FIFOTV_DEV`.
+OpenCode também é classificado exclusivamente como ferramenta de desenvolvimento. Ele não aparece na home nem nos preloads normais. Por decisão explícita do usuário, o comportamento atual foi preservado: `config/settings.json` pode habilitar seu auto-start por `remoteEnabled`, cujo padrão é `false`. Nesta máquina de desenvolvimento o arquivo contém `true`. Não foi adicionada a condição `FIFOTV_DEV`. Uma porta 3000 ocupada é preservada como processo externo; um processo iniciado pelo Electron usa sessão destacada sem pipes e não depende do encerramento da TV.
 
 Os handlers `remote:*` permanecem sem bridge. Isso não transforma OpenCode em funcionalidade suportada da TV. Autenticação, TLS, bind, firewall, ownership e supervisão de produto estão fora desta fundação.
 

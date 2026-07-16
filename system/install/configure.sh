@@ -5,6 +5,9 @@
 # ╚══════════════════════════════════════════════════════════╝
 set -euo pipefail
 
+printf '%s\n' 'ERRO: configurador legado desativado; consulte electron-foundation-before-repository-cleanup.' >&2
+exit 1
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

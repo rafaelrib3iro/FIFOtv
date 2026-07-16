@@ -1754,17 +1754,3 @@ initVolume();
 resetScreensaverTimers();
 updateBluetoothPill();
 setInterval(updateBluetoothPill, 30000);
-
-// ─── CHECK EXTENSION REDIRECT FLAGS ─────────────────────
-// The ui-overlay extension sets these localStorage flags
-// when user clicks "Configurações" or "Monitor" on external pages,
-// then redirects here. We open the corresponding popup.
-setTimeout(() => {
-    if (localStorage.getItem('fifotv-open-settings')) {
-        localStorage.removeItem('fifotv-open-settings');
-        showSettingsPopup();
-    } else if (localStorage.getItem('fifotv-open-monitor')) {
-        localStorage.removeItem('fifotv-open-monitor');
-        showMonitorPopup();
-    }
-}, 400);

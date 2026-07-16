@@ -1,5 +1,7 @@
 # Revisão Arquitetural FIFOtv
 
+> Documento histórico do baseline `9b31cec`. Fontes legadas citadas nesta revisão foram removidas após a consolidação e permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
+
 Revisão estática da branch `refactor/electron-foundation`, commit `9b31cec`. Nenhum arquivo foi alterado, nenhuma dependência foi instalada e a aplicação não foi executada. O único item não versionado já existente é `.directory`.
 
 ## Conclusão Executiva

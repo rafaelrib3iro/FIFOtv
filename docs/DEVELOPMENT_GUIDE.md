@@ -299,14 +299,13 @@ OpenCode não é funcionalidade normal do produto e não deve voltar à UI ou ao
 
 Condição aprovada nesta branch:
 
-- `config/settings.json` local com `remoteEnabled: true` permite auto-start.
+- `config/settings.json` com `remoteEnabled: true` permite auto-start.
 - Ausência do arquivo ou valor `false` mantém o padrão desativado.
-- O arquivo desta máquina é não rastreado e deve permanecer como estado local.
 - Não foi aprovada uma condição `FIFOTV_DEV`.
 
 Não transforme o subsistema em produto durante manutenção da fundação. Autenticação, TLS, bind, firewall, PID ownership e supervisor pertencem a uma decisão futura separada.
 
-Ao inspecionar processos, lembre que o processo destacado pode sobreviver ao Electron. Isso é risco residual aceito do comportamento atual.
+Se a porta 3000 já estiver ocupada, preserve o processo existente: não use `fuser`, `pkill` ou outro comando para liberar a porta. Um processo iniciado pelo Electron usa sessão destacada com `stdio: 'ignore'`, portanto deve sobreviver ao encerramento da TV. Ao testar, inicie `opencode serve --port 3000` manualmente, abra e feche o FIFOtv e confirme que o processo continua acessível.
 
 ## Logging Seguro
 

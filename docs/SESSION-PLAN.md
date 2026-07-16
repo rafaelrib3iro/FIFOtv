@@ -1,5 +1,7 @@
 # FIFOtv — Plano de Sessões (Migração v1 → v2)
 
+> Registro histórico da migração. Caminhos da geração Flask/Chromium citados abaixo foram removidos após a consolidação e permanecem consultáveis na tag `electron-foundation-before-repository-cleanup`.
+
 ## Visão Geral
 
 ```

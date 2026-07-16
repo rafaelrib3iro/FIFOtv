@@ -2,7 +2,7 @@
 
 ## Status e finalidade
 
-Este documento é o inventário oficial aprovado da Macroetapa 5. Ele descreve a branch `refactor/electron-foundation` após as Macroetapas 1 a 4 e as correções obrigatórias de logging da Macroetapa 5.
+Este documento é o inventário oficial aprovado da Macroetapa 5. Ele descreve a fundação Electron consolidada após as Macroetapas 1 a 5 e a limpeza física feita a partir do checkpoint `electron-foundation-before-repository-cleanup`.
 
 Aprovação do usuário registrada em 16 de julho de 2026. As decisões sobre OpenCode, bootstrap e documentos antigos estão consolidadas abaixo.
 
@@ -18,7 +18,7 @@ Os documentos derivados `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_GUIDE.md` e `d
 - `npm run dev` executa `electron .`; `npm start` executa `electron . --kiosk` (`package.json:6-10`).
 - A unidade instalada em `/etc/systemd/system/fifotv.service` está habilitada, mas estava inativa no momento desta inspeção. Quando iniciada, ela executa o Electron Castlabs deste checkout com `.` e `--kiosk`.
 - A cópia versionada `system/fifotv.service` não é idêntica à unidade instalada e não é tratada como o arquivo efetivamente executado.
-- Mudanças anteriores do usuário foram preservadas: exclusões em `docs/`, exclusão de `scripts/FIFOtv-Dev.desktop` e arquivos não rastreados `.directory`, `config/settings.json` e `docs/old/`.
+- Mudanças anteriores do usuário foram consolidadas no commit `7f727f0`, incluindo `config/settings.json`, a movimentação para `docs/old/` e a exclusão de `scripts/FIFOtv-Dev.desktop`.
 
 ## Critério de classificação
 
@@ -78,7 +78,7 @@ Presença no repositório, nome do diretório, documentação histórica, config
 | `frontend/assets/icons/*.svg` | Caminho dinâmico por slug em `frontend/script.js:303-324` e loading em `electron/main.js:943` | Ícones locais para catálogo atual ou apps adicionados; fallback para Simple Icons |
 | `frontend/assets/sounds/*` | Construção em `frontend/script.js:81-88` | Feedback sonoro local |
 
-`backend/` é misto: somente `backend/streamings.json` participa do Electron atual. Os arquivos Python do mesmo diretório não participam.
+Após a limpeza física, `backend/` contém somente `backend/streamings.json`, que participa do Electron atual.
 
 ## IPC e integrações locais
 
@@ -138,8 +138,9 @@ Evidência do mecanismo existente:
 - O subsistema está dentro de `electron/main.js:1124-1293` e pode executar `opencode serve --port 3000` por `spawn` em `:1200`.
 - Não há método remoto em `electron/preload.js`; a home não oferece mais ação visual de acesso remoto.
 - `remote:status` e `remote:toggle` são handlers sem bridge atual, portanto não fazem parte da API normal do renderer.
-- `config/settings.json` é um arquivo local não rastreado. Nesta máquina ele contém `remoteEnabled: true`.
+- `config/settings.json` registra a condição local aprovada e nesta máquina contém `remoteEnabled: true`.
 - `electron/main.js:1303-1310` ainda consulta esse valor em todo startup e pode iniciar OpenCode sem uma condição explícita de desenvolvimento.
+- Se a porta 3000 já estiver em uso, o Electron preserva o processo existente; se iniciar seu próprio processo, usa uma sessão destacada sem pipes para sobreviver ao encerramento do Electron.
 - Na inspeção, o Electron estava parado, mas havia um processo destacado `opencode serve --port 3000` ainda ativo.
 
 Decisão aprovada: manter o comportamento atual. A condição de desenvolvimento aceita é o estado local `remoteEnabled`; o valor padrão continua `false`, não há bridge/UI normal e esta máquina de desenvolvimento mantém o valor `true`. Não será adicionada a variável `FIFOTV_DEV` nesta macroetapa. A possibilidade de um estado local antigo manter o processo ativo é um risco residual aceito, não uma funcionalidade do produto.
@@ -157,27 +158,29 @@ Decisão aprovada: manter o comportamento atual. A condição de desenvolvimento
 | `package-lock.json` | Arquivo local ignorado | Estado de instalação; política de lock/release está fora desta promoção |
 | `.directory` | Metadado KDE não rastreado e sem referência | Artefato local, fora do produto |
 
-# Legado histórico
+# Legado histórico removido
+
+Os arquivos abaixo foram removidos da árvore oficial depois que o estado completo foi preservado pela tag `electron-foundation-before-repository-cleanup`. O histórico continua disponível nessa tag e em commits anteriores.
 
 | Componente | Evidência de não participação no Electron atual | Classificação |
 |---|---|---|
-| `backend/app.py` | Aplicação Flask, HTTP em porta 5000 e launcher/watchdog de Chromium; nenhum `spawn`/`require` ativo aponta para ela | Runtime v1 Flask/Chromium |
-| `backend/bluetooth_manager.py` | Usado pelo Flask; Electron usa `dbus-next` diretamente | Bluetooth Python v1 |
-| `backend/requirements.txt` | Dependências Python; `package.json` inicia Electron | Instalação v1 |
+| `backend/app.py` | Aplicação Flask, HTTP em porta 5000 e launcher/watchdog de Chromium; nenhum `spawn`/`require` ativo apontava para ela | Runtime v1 Flask/Chromium removido |
+| `backend/bluetooth_manager.py` | Usado pelo Flask; Electron usa `dbus-next` diretamente | Bluetooth Python v1 removido |
+| `backend/requirements.txt` | Dependências Python; `package.json` inicia Electron | Instalação v1 removida |
 | `backend/config.json` e `backend/__pycache__/` | Config/bytecode locais ignorados, sem leitura pelo Electron | Estado local da geração Python |
-| `frontend/extensions/tv-override/` | Carregado apenas por `backend/app.py`/instalador antigo; não há `loadExtension` no Electron | Extensão Chromium v1 |
-| `system/scripts/startup.sh` | Inicia watcher e `python3 app.py`; não é chamado pelo bootstrap Electron | Startup v1 |
-| `system/scripts/restart.sh` | Mata/reinicia Chromium e Flask; Electron usa `app.relaunch()` | Restart v1 |
-| `system/scripts/bluetooth-watch.sh` | Chamado pelo startup/instalador antigos; Electron usa BlueZ D-Bus | Watcher v1 |
-| `system/openbox/rc.xml` | Regras para janela Chromium; sem carregamento pelo runtime Electron | Desktop v1 |
-| `system/splash/*` e `frontend/assets/splash-bg.png` | Splash framebuffer/Openbox; Electron usa `frontend/splash.html` | Splash v1 |
-| `electron/views/streaming-customizations/primevideo.js` | `primevideo.com` mapeia explicitamente para `null` | Customização desabilitada e retida como histórico |
+| `frontend/extensions/tv-override/` | Era carregado apenas por `backend/app.py`/instalador antigo; não há `loadExtension` no Electron | Extensão Chromium v1 removida |
+| `system/scripts/startup.sh` | Iniciava watcher e `python3 app.py`; não era chamado pelo bootstrap Electron | Startup v1 removido |
+| `system/scripts/restart.sh` | Matava/reiniciava Chromium e Flask; Electron usa `app.relaunch()` | Restart v1 removido |
+| `system/scripts/bluetooth-watch.sh` | Chamado pelo startup/instalador antigos; Electron usa BlueZ D-Bus | Watcher v1 removido |
+| `system/openbox/rc.xml` | Regras para janela Chromium; sem carregamento pelo runtime Electron | Desktop v1 removido |
+| `system/splash/*` e `frontend/assets/splash-bg.png` | Splash framebuffer/Openbox; Electron usa `frontend/splash.html` | Splash v1 removido |
+| `electron/views/streaming-customizations/primevideo.js` | `primevideo.com` mapeia explicitamente para `null` | Customização desabilitada removida |
 
 # Futuro ou fora do escopo atual
 
 | Componente | Evidência e limite |
 |---|---|
-| `system/install/` | Instala Flask, Chromium e Openbox; não instala o grafo Electron atual. Instalador exige frente operacional própria |
+| `system/install/` | Preserva a implementação histórica do instalador, mas seus scripts executáveis agora falham imediatamente com indicação do checkpoint. A modernização exige frente operacional própria |
 | `system/build/` | Diretório local ignorado com experimento de ISO baseado na cadeia antiga |
 | `system/fifotv.service` | Template versionado de operação; a unidade realmente instalada está em `/etc` e difere dele. Service/deploy não faz parte do runtime JavaScript promovido |
 | `system/DEPENDENCIES.md` | Referência operacional; não é carregada pelo app |
@@ -207,6 +210,7 @@ Há dois updaters, duas fontes locais de preseed e um build de ISO ignorado. Nen
 # Decisões já consolidadas
 
 - O runtime ativo é Electron; Flask/Python/Chromium/Openbox não compõem a arquitetura atual.
+- As fontes comprovadamente inativas da geração Flask/Python/Chromium/Openbox foram removidas após a criação do checkpoint pré-limpeza.
 - `backend/streamings.json` continua ativo mesmo com os demais itens de `backend/` classificados como legado.
 - A home permanece montada enquanto o streaming e o overlay são compostos por `WebContentsView`.
 - OpenCode não é funcionalidade normal da TV; é ferramenta de desenvolvimento.

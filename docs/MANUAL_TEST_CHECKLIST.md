@@ -192,11 +192,11 @@ Status: `[ ]`
 
 **Preparação:** anotar o valor local de `config/settings.json`; abrir home e Settings.
 
-**Ações:** confirmar ausência de acesso remoto na UI; com `remoteEnabled: true` nesta máquina de desenvolvimento, confirmar que `opencode serve --port 3000` continua acessível; não alterar o valor durante a regressão.
+**Ações:** iniciar `opencode serve --port 3000` manualmente; confirmar ausência de acesso remoto na UI; com `remoteEnabled: true` nesta máquina de desenvolvimento, abrir e fechar o FIFOtv e confirmar que o processo manual continua acessível; não alterar o valor durante a regressão.
 
-**Esperado:** nenhuma ação normal da TV expõe OpenCode; o comportamento local aprovado por `remoteEnabled` continua funcional somente como ferramenta de desenvolvimento.
+**Esperado:** nenhuma ação normal da TV expõe OpenCode; o comportamento local aprovado por `remoteEnabled` continua funcional somente como ferramenta de desenvolvimento e não encerra processo externo na porta 3000.
 
-**Regressões a observar:** botão remoto reaparecer, API adicionada ao preload, falha de startup do Electron por causa do processo ou OpenCode descrito como produto.
+**Regressões a observar:** botão remoto reaparecer, API adicionada ao preload, processo externo encerrado, falha de startup do Electron por causa do processo ou OpenCode descrito como produto.
 
 **Evidência em falha:** screenshot da UI, estado local sem segredos, processo e log `[Remote]`.
 

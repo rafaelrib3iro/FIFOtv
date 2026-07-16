@@ -1,8 +1,10 @@
 ---
 plan name: bugfixes-v1
 plan description: Correções pós-instalação all-in-one
-plan status: active
+plan status: archived
 ---
+
+Este plano pertence à geração Flask/Chromium removida. Seu estado completo está preservado na tag `electron-foundation-before-repository-cleanup`.
 
 ## Idea
 Corrigir todos os problemas encontrados após instalação no all-in-one Positivo UD3630: Bluetooth scan/conexão/status, botões do menu Sistema, D-pad navigation nos popups, watch do Chromium pra reiniciar automático, YouTube em modo TV, faixa inferior sem preencher, reiniciar Flask junto com Chromium, popup de senha Wi-Fi customizado, Air mouse BLE, e menu de contexto FIFOtv não aparecendo em alguns lugares.

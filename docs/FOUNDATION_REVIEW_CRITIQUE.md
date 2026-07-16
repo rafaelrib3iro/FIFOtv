@@ -1,5 +1,7 @@
 # Crítica da Revisão Arquitetural da Fundação Electron
 
+> Documento histórico anterior à limpeza física. Fontes legadas citadas permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
+
 ## Escopo e método
 
 Esta é uma auditoria da revisão em `docs/FOUNDATION_REVIEW.md`, não uma nova revisão arquitetural. A análise foi feita sobre o estado atual da branch e por leitura estática do runtime Electron, frontend, preloads, customizações, manifestos e scripts relevantes. Não houve instalação de dependências, execução da aplicação, acesso a serviços de streaming, testes no hardware ou alteração de código de produção.

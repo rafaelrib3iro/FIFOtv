@@ -5,6 +5,9 @@
 # ╚══════════════════════════════════════════════════════════╝
 set -euo pipefail
 
+printf '%s\n' 'ERRO: instalador legado desativado; consulte electron-foundation-before-repository-cleanup.' >&2
+exit 1
+
 cleanup() {
     local exit_code=$?
     if [ "$exit_code" -ne 0 ]; then

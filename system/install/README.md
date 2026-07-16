@@ -1,5 +1,7 @@
 # FIFOtv — Scripts de Instalação
 
+> **Não execute estes scripts no runtime Electron atual.** Esta implementação instala a geração Flask/Chromium removida e foi mantida somente como material para uma futura frente operacional. O código legado correspondente está preservado na tag `electron-foundation-before-repository-cleanup`.
+
 ## Instalação Rápida
 
 ### Pré-requisitos

@@ -1191,23 +1191,19 @@ function startRemoteProcess() {
   return new Promise(async (resolve) => {
     const free = await checkPort(3000);
     if (!free) {
-      if (log) log.warn('[Remote] Porta 3000 ocupada, tentando liberar...');
-      exec('fuser -k 3000/tcp 2>/dev/null', { timeout: 3000 });
-      await new Promise((r) => setTimeout(r, 500));
+      if (log) log.info('[Remote] Porta 3000 já está em uso; mantendo processo existente.');
+      remoteRunning = true;
+      startRemoteHealthCheck();
+      resolve({ running: true, external: true });
+      return;
     }
     if (log) log.info('[Remote] Iniciando opencode serve...');
     try {
       remoteProcess = spawn('opencode', ['serve', '--port', '3000'], {
         detached: true,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: 'ignore'
       });
       remoteProcess.unref();
-      remoteProcess.stdout.on('data', (d) => {
-        if (log) log.info(`[opencode] ${d.toString().trim()}`);
-      });
-      remoteProcess.stderr.on('data', (d) => {
-        if (log) log.warn(`[opencode] ${d.toString().trim()}`);
-      });
       remoteProcess.on('error', (err) => {
         if (log) log.error('[Remote] Erro ao iniciar:', err.message);
         remoteRunning = false;

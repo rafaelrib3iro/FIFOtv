@@ -5,6 +5,8 @@ plan status: done
 ---
 
 ## Idea
+O script específico do Prime Video foi posteriormente desabilitado por regressão de playback e removido na limpeza física; o provider continua explicitamente mapeado para `null`.
+
 Sessão 4.5: Customizar a interface dos streamings para layout TV — maior, menos poluído, melhor para D-pad. Abordagem: usar webContents.on('dom-ready') + executeJavaScript() para injetar CSS/JS customizado em cada streaming. Scripts ficam em electron/views/streaming-customizations/. Usar seletores do projeto open-source Streaming Enhanced (Dreamlinerm/Netflix-Prime-Auto-Skip, 566 stars, 40k usuários) como base, adaptando-os de TypeScript/com extensão para vanilla JS/executeJavaScript. Ordem de prioridade: Netflix → Prime Video → Apple TV/Music → Max → Disney+ → Globoplay. Cada fase é testada individualmente antes de avançar. Streaming Enhanced não tem suporte a Globoplay, Apple TV nem Apple Music — esses precisam de seletores customizados. A extensão é Manifest V3 (service worker), então não pode ser carregada diretamente no Electron — vamos extrair só a lógica dos content scripts e adaptar para executeJavaScript.
 
 ## Implementation

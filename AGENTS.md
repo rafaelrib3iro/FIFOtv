@@ -47,7 +47,6 @@ Bootstrap externo observado ou npm scripts → Electron (kiosk/dev)
 │           ├── netflix.js               # Customização Netflix
 │           ├── disney.js                # Customização Disney+
 │           ├── max.js                   # Customização Max
-│           ├── primevideo.js            # Customização Prime Video
 │           ├── appletv.js               # Customização Apple TV+
 │           ├── applemusic.js            # Customização Apple Music
 │           └── globoplay.js             # Customização Globoplay
