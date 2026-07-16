@@ -53,6 +53,12 @@
       "name": "Globoplay",
       "slug": "globoplay",
       "url": "www.globoplay.com.br"
+    },
+    {
+      "id": 1752627600000,
+      "name": "Nuvio",
+      "slug": "nuvio",
+      "url": "https://web.nuvioapp.space/"
     }
   ]
 }

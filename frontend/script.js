@@ -214,7 +214,8 @@ const DEFAULT_STREAMINGS = [
     { id: 4, name: "Disney+",      slug: "disneyplus",   url: "https://disneyplus.com" },
     { id: 5, name: "Spotify",      slug: "spotify",      url: "https://open.spotify.com" },
     { id: 6, name: "Apple TV",     slug: "appletv",      url: "https://tv.apple.com" },
-    { id: 7, name: "Max",          slug: "hbomax",       url: "https://max.com" }
+    { id: 7, name: "Max",          slug: "hbomax",       url: "https://max.com" },
+    { id: 8, name: "Nuvio",        slug: "nuvio",        url: "https://web.nuvioapp.space/" }
 ];
 
 async function loadStreamings() {
