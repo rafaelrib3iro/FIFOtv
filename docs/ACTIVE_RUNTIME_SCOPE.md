@@ -17,7 +17,7 @@ Os documentos derivados `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_GUIDE.md` e `d
 - O runtime da branch parte de `package.json:5`, que aponta para `electron/main.js`.
 - `npm run dev` executa `electron .`; `npm start` executa `electron . --kiosk` (`package.json:6-10`).
 - A unidade instalada em `/etc/systemd/system/fifotv.service` está habilitada, mas estava inativa no momento desta inspeção. Quando iniciada, ela executa o Electron Castlabs deste checkout com `.` e `--kiosk`.
-- A cópia versionada `system/fifotv.service` não é idêntica à unidade instalada e não é tratada como o arquivo efetivamente executado.
+- O único arquivo versionado em `system/` é `.xinitrc`, preservado como helper local de Xorg e fora do runtime JavaScript.
 - Mudanças anteriores do usuário foram consolidadas no commit `7f727f0`, incluindo `config/settings.json`, a movimentação para `docs/old/` e a exclusão de `scripts/FIFOtv-Dev.desktop`.
 
 ## Critério de classificação
@@ -180,12 +180,8 @@ Os arquivos abaixo foram removidos da árvore oficial depois que o estado comple
 
 | Componente | Evidência e limite |
 |---|---|
-| `system/install/` | Preserva a implementação histórica do instalador, mas seus scripts executáveis agora falham imediatamente com indicação do checkpoint. A modernização exige frente operacional própria |
-| `system/build/` | Diretório local ignorado com experimento de ISO baseado na cadeia antiga |
-| `system/fifotv.service` | Template versionado de operação; a unidade realmente instalada está em `/etc` e difere dele. Service/deploy não faz parte do runtime JavaScript promovido |
-| `system/DEPENDENCIES.md` | Referência operacional; não é carregada pelo app |
-| `scripts/update.sh` | Possui handler `system:update`, mas não há bridge/UI; aponta para canal/branch operacional antigo e fica fora do fluxo normal |
-| `update.sh` | Migração operacional v1 para v2; não é chamado pelo Electron |
+| Instalador, ISO e template systemd versionados | Removidos na limpeza física; a unidade observada continua externa em `/etc/systemd/system/fifotv.service` |
+| `scripts/update.sh` e `update.sh` | Fluxos legados bloqueados explicitamente; `system:update` continua interno, sem bridge/UI |
 | `package.json` em `build`/`dist` | `.deb` e AppImage são comandos declarados, mas artefatos não foram validados e `build.files` não inclui catálogo/configuração ativos |
 | `docs/WEBOS_APPS_GUIDE.md` | Pesquisa/proposta WebOS/Spotify sem implementação correspondente na branch |
 | Migração para `userData`, ISO, boot, Plymouth, release, CI, pacote e updater | Backlog explícito da Macroetapa 5; não são arquitetura implementada |
@@ -216,7 +212,7 @@ Há dois updaters, duas fontes locais de preseed e um build de ISO ignorado. Nen
 - OpenCode não é funcionalidade normal da TV; é ferramenta de desenvolvimento.
 - Build, ISO, instalador, boot, updater, pacote e migração completa de persistência não entram na promoção da fundação.
 - A documentação antiga é pista histórica, nunca prova de runtime.
-- O systemd instalado pode ser citado como fronteira ambiental observada, mas `system/fifotv.service` e `system/.xinitrc` permanecem fora da arquitetura ativa versionada.
+- O systemd instalado pode ser citado como fronteira ambiental observada. `system/.xinitrc` permanece somente como helper local, fora da arquitetura ativa versionada.
 - A movimentação das cinco documentações antigas para `docs/old/` é intencional e será tratada separadamente no fechamento Git.
 - O comportamento atual do OpenCode, condicionado por `remoteEnabled`, foi mantido por decisão explícita do usuário.
 

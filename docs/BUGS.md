@@ -188,7 +188,7 @@ win = new BrowserWindow({ x: 0, y: 0, width, height, frame: false, ... });
 5. Timer de idle: 3s sem mouse → `fifotv-cursor-idle` → `cursor: none`
 6. Electron agora tem controle total do cursor
 
-**Arquivos atuais:** `electron/main.js`, `frontend/style.css`, `electron/views/overlay.css`, `frontend/assets/cursors/`, `system/.xinitrc`, `update.sh`, `system/install/configure.sh`, `system/install/setup.sh`. O antigo `system/scripts/restart.sh` está preservado apenas no checkpoint pré-limpeza.
+**Arquivos atuais:** `electron/main.js`, `frontend/style.css`, `electron/views/overlay.css`, `frontend/assets/cursors/`, `system/.xinitrc`. Os fluxos de update/instalação e `system/scripts/restart.sh` são históricos e estão preservados no checkpoint pré-limpeza.
 
 ---
 
@@ -284,9 +284,9 @@ Estado resultante: `navState` = `'settings-item'` mas foco visual está no grid 
 2. Criado IPC handler `system:screen-off` no main.js → `exec('xset dpms force off')`
 3. Exposto `screenOff()` no preload.js
 4. Timer no `script.js` chama `window.fifotv.screenOff()`
-5. Mesma correção aplicada em `system/install/configure.sh`
+5. A correção histórica do instalador ficou preservada no checkpoint pré-limpeza.
 
-**Arquivos:** `system/.xinitrc`, `system/install/configure.sh`, `electron/main.js`, `electron/preload.js`, `frontend/script.js`
+**Arquivos atuais:** `system/.xinitrc`, `electron/main.js`, `electron/preload.js`, `frontend/script.js`. O instalador histórico está preservado no checkpoint pré-limpeza.
 
 ---
 

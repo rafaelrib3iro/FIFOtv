@@ -59,10 +59,10 @@ Bootstrap externo observado ou npm scripts → Electron (kiosk/dev)
 │   └── assets/                          # SVGs, cursores, ícones
 ├── backend/
 │   └── streamings.json                  # Dados dos streamings (CRUD via IPC)
-├── system/                              # Operação/legado fora do runtime ativo aprovado
+├── system/.xinitrc                      # Helper local de Xorg, fora do runtime JS
 ├── scripts/
 │   ├── dev.sh                           # npm run dev helper
-│   ├── update.sh                        # Script de update no all-in-one
+│   ├── update.sh                        # Updater legado bloqueado
 │   └── keytest.js                       # Teste de teclas via Electron
 ├── docs/                                # Documentação do projeto
 ├── package.json                         # Dependências Node.js

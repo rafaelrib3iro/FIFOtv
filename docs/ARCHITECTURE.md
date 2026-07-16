@@ -4,7 +4,7 @@
 
 Esta arquitetura deriva exclusivamente do inventário aprovado em `docs/ACTIVE_RUNTIME_SCOPE.md`. Ela descreve o runtime Electron executado a partir deste checkout e não trata Flask, Chromium autônomo, Openbox, ISO, instalador, updater, pacote ou boot como partes implementadas da fundação atual.
 
-O systemd instalado é somente uma fronteira ambiental observada: ele pode iniciar o checkout em modo kiosk, mas os templates versionados em `system/` não são considerados fontes ativas da arquitetura.
+O systemd instalado é somente uma fronteira ambiental observada: ele pode iniciar o checkout em modo kiosk. O único arquivo versionado em `system/`, `.xinitrc`, é um helper local de Xorg e não integra a arquitetura ativa.
 
 ## Bootstrap
 

@@ -53,7 +53,7 @@ tail -f /var/log/fifotv/main.log
 journalctl -u fifotv -f
 ```
 
-`/var/log/fifotv/main.log` é a fonte mais completa quando `config/logging.json` está habilitado. `journalctl` depende da unidade externa instalada e não prova que `system/fifotv.service` do repositório seja o arquivo usado.
+`/var/log/fifotv/main.log` é a fonte mais completa quando `config/logging.json` está habilitado. `journalctl` depende da unidade externa instalada em `/etc/systemd/system/fifotv.service`.
 
 ## Localizar a Origem de um Comportamento
 
