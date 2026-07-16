@@ -1671,6 +1671,22 @@ Qualquer item essencial da regressão final ainda não executado mantém a branc
 
 Extração opcional deve ter commit próprio e teste próprio.
 
+## Resultado Registrado da Sessão 5
+
+Registro em 16 de julho de 2026, na branch `refactor/electron-foundation`:
+
+- Macroetapas 1 a 4 confirmadas pelos commits `5fe1cdb`, `1bd1502`, `c56a50d` e `112f886`.
+- Logging de rede passou a usar um listener por sessão, com atribuição por `webContentsId` e redaction de credenciais, query e fragment.
+- Contratos incorretos de `preload-error` e GPU foram corrigidos; APIs mortas do preload do overlay foram removidas.
+- `npm test` e `npm run check` foram adicionados para os testes `node:test` e syntax checks existentes.
+- `docs/ACTIVE_RUNTIME_SCOPE.md` foi criado, apresentado e aprovado pelo usuário antes dos documentos derivados.
+- `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_GUIDE.md` e `docs/MANUAL_TEST_CHECKLIST.md` foram criados a partir do inventário aprovado.
+- OpenCode foi confirmado como ferramenta exclusiva de desenvolvimento, sem bridge/UI normal. Por decisão explícita, permanece condicionado por `remoteEnabled` no estado local; `FIFOTV_DEV` não foi introduzido.
+- A movimentação pré-existente de documentos para `docs/old/` foi confirmada como intencional e permanece separada desta macroetapa.
+- Validação automática final: `npm run check` com 31 testes aprovados e `git diff --check` aprovado.
+- Regressão manual completa do checklist, incluindo hardware, Castlabs e providers, foi aprovada pelo usuário.
+- Sem commit ou promoção automática: a aprovação de commit e a resolução separada das mudanças pré-existentes no worktree permanecem necessárias antes de promover para `main`.
+
 ## Encerramento da Sessão
 
 - Resumir o estado final da fundação.

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "electron .",
     "start": "electron . --kiosk",
+    "test": "node --test test",
+    "check": "node --check electron/*.js && node --check electron/views/*.js && node --check electron/views/spatial-navigation/*.js && node --check electron/views/streaming-customizations/*.js && node --check frontend/*.js && node --test test",
     "build": "electron-builder --linux deb",
     "dist": "electron-builder --linux AppImage"
   },

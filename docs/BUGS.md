@@ -1,5 +1,7 @@
 # FIFOtv v2 — Bugs Reportados
 
+> Registro histórico de reproduções e correções. Não use este arquivo isoladamente como inventário do runtime atual. A fonte aprovada é `docs/ACTIVE_RUNTIME_SCOPE.md`; alguns relatos abaixo citam arquivos operacionais, extensão Chromium ou implementações que hoje estão inativas.
+
 ## Status
 
 | # | Bug | Status | Commit |

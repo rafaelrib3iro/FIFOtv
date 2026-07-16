@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, shell, screen, session, components, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, screen, session, components, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec, execFile, spawn } = require('child_process');
@@ -12,6 +12,7 @@ const { isCurrentView } = require('./view-lifecycle');
 const { hostnameFromUrl, matchesHostname, resolveCustomScript } = require('./provider-resolution');
 const { redactStreamingUrl, runInjectionStages } = require('./streaming-injection');
 const { createClientHintsRegistry } = require('./client-hints');
+const { createNetworkErrorRegistry, redactUrl } = require('./runtime-logging');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -58,6 +59,9 @@ const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
 const SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
 const SPA_DOMAINS = new Set(['youtube']);
 const clientHintsRegistry = createClientHintsRegistry();
+const networkErrorRegistry = createNetworkErrorRegistry((details) => {
+  log?.warn(`[Network:${details.label}]`, details.method, details.url, '->', details.error);
+});
 const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 const SMART_TV_CLIENT_HINTS = {
   'Sec-CH-UA-Platform': '"Tizen"',
@@ -166,7 +170,7 @@ function protectLocalView(view) {
   view.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file://')) {
       event.preventDefault();
-      console.warn(`[FIFOtv] Blocked local view navigation to ${url}`);
+      console.warn(`[FIFOtv] Blocked local view navigation to ${redactUrl(url)}`);
     }
   });
 }
@@ -292,7 +296,7 @@ handleFrom('system:stats', () => [homeView, overlayView], async () => {
   }
 });
 
-handleFrom('system:info', () => [homeView, overlayView], () => {
+handleFrom('system:info', () => [homeView], () => {
   const interfaces = os.networkInterfaces();
   let ip = '127.0.0.1';
   for (const name of Object.keys(interfaces)) {
@@ -327,38 +331,36 @@ if (log) {
 function attachRendererLogging(webContents, label) {
   if (!webContents || webContents.isDestroyed()) return;
 
-  webContents.on('console-message', (event, level, message, line, sourceId) => {
+  webContents.on('console-message', (event) => {
     const prefix = `[Renderer:${label}]`;
-    if (level === 1) log?.info(prefix, message);
-    else if (level === 2) log?.warn(prefix, message);
-    else if (level === 3) log?.error(prefix, message);
+    if (event.level === 'error') log?.error(prefix, event.message);
+    else if (event.level === 'warning') log?.warn(prefix, event.message);
+    else if (event.level === 'debug') log?.debug(prefix, event.message);
+    else log?.info(prefix, event.message);
   });
 
   webContents.on('did-fail-load', (event, code, desc, url, isMainFrame) => {
-    log?.error(`[Renderer:${label}] did-fail-load`, { code, desc, url, isMainFrame });
+    log?.error(`[Renderer:${label}] did-fail-load`, { code, desc, url: redactUrl(url), isMainFrame });
   });
 
   webContents.on('render-process-gone', (event, details) => {
     log?.error(`[Renderer:${label}] render-process-gone`, details);
   });
 
-  webContents.on('gpu-process-crashed', (event, killed) => {
-    log?.error(`[Renderer:${label}] GPU crashed`, { killed });
-  });
-
-  webContents.on('preload-error', (event, error) => {
-    log?.error(`[Renderer:${label}] preload-error`, error);
+  webContents.on('preload-error', (event, preloadPath, error) => {
+    log?.error(`[Renderer:${label}] preload-error`, { preloadPath, error });
   });
 
   webContents.on('unresponsive', () => log?.warn(`[Renderer:${label}] unresponsive`));
   webContents.on('responsive', () => log?.info(`[Renderer:${label}] responsive again`));
 
-  webContents.session.webRequest.onErrorOccurred((details) => {
-    if (details.error !== 'net::ERR_ABORTED') {
-      log?.warn(`[Network:${label}]`, details.method, details.url, '→', details.error);
-    }
-  });
+  const removeNetworkLogging = networkErrorRegistry.register(webContents.session, webContents.id, label);
+  webContents.once('destroyed', removeNetworkLogging);
 }
+
+app.on('child-process-gone', (_, details) => {
+  if (details.type === 'GPU') log?.error('[GPU] child-process-gone', details);
+});
 
 // IPC: runtime logging control
 handleFrom('logging:get-status', () => [homeView], () => ({
@@ -873,12 +875,12 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
     console.error(`[streaming] returning home after ${reason}`);
     returnHome();
   };
-  streamView.webContents.loadURL(url);
   streamView.webContents.on('did-fail-load', (_, code, desc, failedUrl, isMainFrame) => {
     console.error(`[streaming] failed to load: ${code} ${desc}`);
-    if (code !== -3 && isMainFrame) recoverStreaming(`main-frame load failure: ${failedUrl}`);
+    if (code !== -3 && isMainFrame) recoverStreaming(`main-frame load failure: ${redactUrl(failedUrl)}`);
   });
   streamView.webContents.on('render-process-gone', (_, details) => recoverStreaming(`renderer exit: ${details.reason}`));
+  streamView.webContents.loadURL(url);
 
   streamView.webContents.on('dom-ready', () => {
     if (!isCurrentStreamingView(streamView, streamGeneration)) return;
@@ -938,11 +940,11 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   loadingView.setBackgroundColor('#0a0816');
   loadingView.setBounds({ x: 0, y: 0, width, height });
   const iconPath = slug ? `file://${path.join(__dirname, '..', 'frontend', 'assets', 'icons', `${slug}.svg`)}` : '';
+  attachRendererLogging(loadingView.webContents, 'loading');
   loadingView.webContents.loadFile(
     path.join(__dirname, 'views', 'loading.html'),
     { query: { name: name || '', icon: iconPath } }
   );
-  attachRendererLogging(loadingView.webContents, 'loading');
 
   // Create overlay view
   overlayView = new WebContentsView({
@@ -955,8 +957,8 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   overlayView.setBackgroundColor('#00000000');
   overlayView.setBounds({ x: 0, y: 0, width, height });
   protectLocalView(overlayView);
-  overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
   attachRendererLogging(overlayView.webContents, 'overlay');
+  overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
 
   // NOTE: before-input-event on overlay was previously blocking arrow keys
   // when menu was open (prevented default + sendInputEvent), which broke
@@ -1071,15 +1073,6 @@ handleFrom('overlay:zoom', () => [overlayView], (_, delta) => {
     return { ok: true, zoom };
   }
   return { ok: false, error: 'Streaming indisponível' };
-});
-
-handleFrom('overlay:set-mouse-events', () => [overlayView], (_, ignore) => {
-  assertPayload(typeof ignore === 'boolean', 'mouse event flag');
-  if (isOverlayAlive() && typeof overlayView.webContents.setIgnoreMouseEvents === 'function') {
-    overlayView.webContents.setIgnoreMouseEvents(ignore);
-    return { ok: true };
-  }
-  return { ok: false, error: 'Mouse passthrough indisponível neste runtime' };
 });
 
 handleFrom('overlay:focus', () => [overlayView], (_, target) => {
@@ -1352,9 +1345,9 @@ app.whenReady().then(async () => {
   });
   splashView.setBackgroundColor('#000000');
   splashView.setBounds({ x: 0, y: 0, width, height });
+  attachRendererLogging(splashView.webContents, 'splash');
   splashView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'splash.html'));
   addView(splashView);
-  attachRendererLogging(splashView.webContents, 'splash');
 
   // After 3.5s: remove splash, create and show homeView
   setTimeout(() => {
@@ -1375,8 +1368,8 @@ app.whenReady().then(async () => {
     const { width: w, height: h } = getViewBounds();
     homeView.setBounds({ x: 0, y: 0, width: w, height: h });
     protectLocalView(homeView);
-    homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
     attachRendererLogging(homeView.webContents, 'home');
+    homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
 
     homeView.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;

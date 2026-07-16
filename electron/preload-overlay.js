@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld('fifotv', {
 
   // Sistema
   getStats: () => ipcRenderer.invoke('system:stats'),
-  getInfo: () => ipcRenderer.invoke('system:info'),
 
   // Navegação
   goHome: () => ipcRenderer.invoke('nav:go-home'),
@@ -22,8 +21,7 @@ contextBridge.exposeInMainWorld('fifotv', {
   // Zoom
   zoom: (delta) => ipcRenderer.invoke('overlay:zoom', delta),
 
-  // Focus + mouse passthrough
-  setMouseEvents: (ignore) => ipcRenderer.invoke('overlay:set-mouse-events', ignore),
+  // Focus
   setFocus: (target) => ipcRenderer.invoke('overlay:focus', target),
   setMenuVisibility: (visible) => ipcRenderer.send('overlay:menu-visibility', visible),
 
@@ -38,5 +36,4 @@ contextBridge.exposeInMainWorld('fifotv', {
   // Eventos do main process
   onKey: (cb) => ipcRenderer.on('key-event', (_, input) => cb(input)),
   onShowMenu: (cb) => ipcRenderer.on('show-menu', (_, data) => cb(data)),
-  onHideMenu: (cb) => ipcRenderer.on('hide-menu', () => cb()),
 });

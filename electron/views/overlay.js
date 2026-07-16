@@ -483,17 +483,11 @@
     handleKey({ key: e.key, code: e.code, type: 'keyDown' });
   }, true);
 
-  // ─── LISTEN FOR SHOW/HIDE MENU FROM MAIN PROCESS ───────
+  // ─── LISTEN FOR SHOW MENU FROM MAIN PROCESS ────────────
 
   if (window.fifotv && window.fifotv.onShowMenu) {
     window.fifotv.onShowMenu((data) => {
       showMenu(data.x, data.y);
-    });
-  }
-
-  if (window.fifotv && window.fifotv.onHideMenu) {
-    window.fifotv.onHideMenu(() => {
-      hideMenu();
     });
   }
 

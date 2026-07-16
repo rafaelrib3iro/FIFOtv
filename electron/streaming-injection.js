@@ -1,11 +1,6 @@
-function redactStreamingUrl(value) {
-  try {
-    const url = new URL(value);
-    return `${url.protocol}//${url.host}${url.pathname}`;
-  } catch {
-    return '[invalid URL]';
-  }
-}
+const { redactUrl } = require('./runtime-logging');
+
+const redactStreamingUrl = redactUrl;
 
 async function runInjectionStages({ webContents, stages, isCurrent, onStageError }) {
   for (const stage of stages) {

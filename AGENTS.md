@@ -8,8 +8,10 @@ O projeto está em fase de beta (primeira versão).
 
 ## Arquitetura
 
+A fonte detalhada e aprovada do runtime é `docs/ACTIVE_RUNTIME_SCOPE.md`; `docs/ARCHITECTURE.md` descreve somente os componentes comprovadamente ativos.
+
 ```
-Debian → Xorg → systemd (fifotv.service) → Electron (kiosk)
+Bootstrap externo observado ou npm scripts → Electron (kiosk/dev)
                                               │
                                               ├─ BrowserWindow (frameless, fullscreen)
                                               │   └─ contentView (WebContentsViews empilhadas)
@@ -58,12 +60,7 @@ Debian → Xorg → systemd (fifotv.service) → Electron (kiosk)
 │   └── assets/                          # SVGs, cursores, ícones
 ├── backend/
 │   └── streamings.json                  # Dados dos streamings (CRUD via IPC)
-├── system/
-│   ├── fifotv.service                   # Unit systemd (auto-start)
-│   ├── .xinitrc                         # Config Xorg (xset, unclutter)
-│   ├── install/                         # Scripts de instalação
-│   ├── scripts/                         # Scripts auxiliares
-│   └── DEPENDENCIES.md                  # Dependências do sistema
+├── system/                              # Operação/legado fora do runtime ativo aprovado
 ├── scripts/
 │   ├── dev.sh                           # npm run dev helper
 │   ├── update.sh                        # Script de update no all-in-one
@@ -107,7 +104,7 @@ Comunicação entre renderer (frontend/overlay) e main process via `ipcRenderer.
 | `wifi:scan` | Escaneia redes disponíveis |
 | `wifi:connect` | Conecta em rede (ssid, senha) |
 | `bt:status` | Status do Bluetooth |
-| `bt:scan` | Escaneia dispositivos pareados |
+| `bt:scan` | Escaneia dispositivos visíveis/conhecidos |
 | `bt:connect` | Conecta dispositivo por MAC |
 | `bt:disconnect` | Desconecta dispositivo |
 | `bt:unpair` | Despareia dispositivo |
@@ -118,37 +115,30 @@ Comunicação entre renderer (frontend/overlay) e main process via `ipcRenderer.
 | `system:shutdown` | Desliga máquina |
 | `system:reboot` | Reinicia máquina |
 | `system:restart` | Reinicia app Electron |
-| `system:update` | Executa git pull + npm install + restart |
-| `system:stats` | CPU, RAM, uptime |
-| `system:info` | IP, hostname, versão |
+| `system:stats` | CPU, RAM, disco e processos |
+| `system:info` | IP e hostname |
 
 ### Overlay
 | Canal | Descrição |
 |-------|-----------|
 | `overlay:show-menu` | Sobe overlay pro topo (menu contexto) |
-| `overlay:hide-menu` | Desce overlay (streaming volta ao topo) |
+| `overlay:hide-menu` | Remove overlay da composição e foca streaming |
 | `overlay:toast-show` | Sobe overlay pra toast de volume |
 | `overlay:toast-hide` | Desce overlay após toast |
 | `overlay:zoom` | Ajusta zoom do streaming |
 | `overlay:focus` | Define foco (streaming ou overlay) |
-| `overlay:set-mouse-events` | Gerencia passagem de mouse |
 | `overlay:menu-visibility` | Notifica visibilidade do menu |
 
-### Acesso Remoto
-| Canal | Descrição |
-|-------|-----------|
-| `remote:status` | Status do acesso remoto |
-| `remote:toggle` | Liga/desliga acesso remoto |
+### Handlers internos sem bridge
+
+`system:update`, `logging:*` e `remote:*` permanecem registrados no main, mas nenhum preload atual os expõe. Eles não são APIs disponíveis na UI normal. OpenCode é ferramenta exclusiva de desenvolvimento, condicionada pelo `remoteEnabled` local aprovado.
 
 ### Eventos (main → renderer)
 | Canal | Descrição |
 |-------|-----------|
-| `volume:changed` | Volume alterado (dados: {level, muted}) |
-| `bt:status-changed` | Status Bluetooth alterado |
 | `global-key` | Tecla global pressionada |
 | `key-event` | Tecla encaminhada pro overlay |
 | `show-menu` | Overlay deve mostrar menu |
-| `hide-menu` | Overlay deve esconder menu |
 
 ## Customização de Streamings
 
@@ -194,19 +184,19 @@ Usa `contextIsolation: false` no streamingView para que os overrides sejam visí
 
 O overlay (`electron/views/overlay.html`) é uma WebContentsView transparente que fica sobre o streamingView. Gerencia:
 
-- **Menu de contexto:** Início, Recarregar, Zoom, Volume, Monitor, Configurações, Desligar
+- **Menu de contexto:** Início, Recarregar, Zoom, Volume, Monitor, Desligar
 - **Volume toast:** Feedback visual ao alterar volume
-- **Z-order management:** Overlay fica ATRÁS do streaming por padrão (mouse funciona no streaming). Quando menu abre, overlay sobe pro topo. Quando fecha, desce novamente.
+- **Z-order management:** Overlay fica fora da composição por padrão. Quando menu/toast abre, ele é adicionado acima do streaming; ao fechar, é removido.
 
 **Fluxo do menu:**
-1. Tecla `ContextMenu` → main encaminha pro overlay via `key-event`
+1. Tecla `ContextMenu` → main monta o overlay e envia `show-menu`
 2. Overlay mostra menu → envia `overlay:show-menu` → main sobe overlay ao topo + dá foco
 3. D-pad navega no menu → overlay processa internamente
-4. Seleção/Voltar → overlay esconde menu → envia `overlay:hide-menu` → main desce overlay + foca streaming
+4. Seleção/Voltar → overlay esconde menu → envia `overlay:hide-menu` → main remove overlay + foca streaming
 
 ## Navegação por D-pad
 
-Chromium flag `enable-spatial-navigation` habilita navegação por setas entre elementos focáveis nativamente. Além disso, `before-input-event` no main.js captura teclas especiais:
+O spatial navigation nativo está desabilitado; um polyfill é injetado por streaming quando habilitado pelo slug. Além disso, `before-input-event` no main.js captura teclas especiais:
 
 | Tecla | Ação |
 |-------|------|
@@ -222,12 +212,12 @@ A homepage (`frontend/script.js`) mantém estado de navegação (`navState`) par
 | Componente | Tecnologia |
 |------------|-----------|
 | Runtime | Electron (castlabs fork com Widevine) |
-| Empacotamento | electron-builder (.deb, .AppImage) |
+| Empacotamento | electron-builder declarado, não validado e fora desta promoção |
 | Bluetooth | D-Bus nativo (dbus-next) |
 | Wi-Fi | NetworkManager (nmcli) |
 | Volume | WirePipe (wpctl) |
 | Display | Xorg (sem DE) |
-| Serviço | systemd (fifotv.service) |
+| Bootstrap externo | systemd instalado observado; templates versionados fora do runtime ativo |
 | Lado do sistema | Debian 13 (Trixie) |
 
 ### Dependências Node.js
@@ -240,12 +230,12 @@ A homepage (`frontend/script.js`) mantém estado de navegação (`navState`) par
 
 - Commits NUNCA devem ser feitos sem autorização expressa do usuário
 - Não adicionar comentários no código a menos que solicitado
-- Branch `main` = código estável, branch `electron` = desenvolvimento ativo
+- Usar a branch atual como fonte de verdade; a `main` antiga não define o runtime automaticamente
 - Customizações por streaming ficam em `electron/views/streaming-customizations/`, mapeadas em `config.js`
 - IPC channels seguem padrão `domínio:ação` (ex: `volume:up`, `bt:scan`)
 - Preloads são específicos por contexto: `preload.js` (homepage), `preload-overlay.js` (overlay), `preload-streaming.js` (streaming)
 - CSS do overlay usa visual glassmorphism (backdrop-filter, transparência)
-- SVG icons são inline nos arquivos JS (não em arquivos separados)
+- Ícones estáticos podem ser inline; ícones de apps também existem em `frontend/assets/icons/`
 
 ## Comandos Úteis
 
@@ -256,9 +246,10 @@ npm run dev                    # Electron em janela (sem kiosk)
 # Produção (all-in-one)
 npm start                      # Electron em kiosk mode
 
-# Build
-npm run build                  # electron-builder → .deb
-npm run dist                   # electron-builder → AppImage
+# Validação local
+npm test                       # testes node:test
+npm run check                  # syntax checks + testes
+git diff --check               # whitespace do diff
 
 # Debug no all-in-one
 journalctl -u fifotv -f       # Logs do serviço em tempo real
@@ -266,9 +257,13 @@ sudo systemctl status fifotv  # Status do serviço
 sudo systemctl restart fifotv # Reiniciar serviço
 ```
 
-## Testes Autônomos
+## Testes Versionados
 
-Framework de testes em `/home/rafael/Documentos/FIFOtv Testes Autônomos/`.
+Os testes puros da fundação ficam em `test/` e são executados por `npm test` ou `npm run check`. O diagnóstico físico de teclas usa `npx electron scripts/keytest.js`.
+
+## Framework Externo de Testes
+
+Existe documentação histórica de um framework em `/home/rafael/Documentos/FIFOtv Testes Autônomos/`. Ele fica fora deste workspace e não é evidência automática da promoção atual.
 
 ### Como rodar
 
@@ -331,12 +326,12 @@ run();
 | Arquivo | Conteúdo |
 |---------|----------|
 | `docs/BUGS.md` | Bugs conhecidos e status |
-| `docs/DEPLOY-V2.md` | Instruções de deploy |
+| `docs/ACTIVE_RUNTIME_SCOPE.md` | Inventário ativo aprovado |
+| `docs/ARCHITECTURE.md` | Arquitetura Electron ativa |
+| `docs/DEVELOPMENT_GUIDE.md` | Guia da fundação atual |
+| `docs/MANUAL_TEST_CHECKLIST.md` | Regressão manual reutilizável |
 | `docs/SESSION-PLAN.md` | Plano de sessões de desenvolvimento |
-| `docs/MIGRATION-PLAN.md` | Plano de migração |
-| `docs/ELECTRON-CASTLABS-FIX.md` | Fix do Electron castlabs + Widevine |
-| `docs/DEPENDENCIES.md` | Dependências do sistema |
-| `docs/bluez-dbus-api-reference.md` | Referência da API BlueZ D-Bus |
+| `docs/old/` | Documentos históricos movidos intencionalmente |
 
 ## Desenvolvimento (contexto local)
 
@@ -391,17 +386,7 @@ sed -i 's/"level": "info"/"level": "debug"/' /home/tv/smarttv/config/logging.jso
 sudo systemctl restart fifotv
 ```
 
-**Via IPC (runtime, requer restart para aplicar):**
-```bash
-# Ver status
-echo '{"id":1,"method":"logging:get-status"}' | nc -U /tmp/fifotv-socket
-
-# Ativar/desativar
-echo '{"id":1,"method":"logging:set-enabled","params":[false]}' | nc -U /tmp/fifotv-socket
-
-# Mudar nível
-echo '{"id":1,"method":"logging:set-level","params":["debug"]}' | nc -U /tmp/fifotv-socket
-```
+Os handlers Electron `logging:*` não possuem bridge nem socket Unix no runtime atual. A configuração operacional suportada nesta fase é o arquivo seguido de restart.
 
 ### Ver logs em tempo real
 ```bash
@@ -414,16 +399,17 @@ journalctl -u fifotv -f
 
 ### O que é capturado
 - **Main process:** todos os `console.log/error/warn` (IPC handlers, BT, volume, navegação, etc.)
-- **Renderer processes (todas views):** via IPC transport automático
-  - `splashView`, `homeView`, `streamingView`, `loadingView`, `overlayView`
-- **Erros críticos por view:** `did-fail-load`, `render-process-gone`, `gpu-process-crashed`, `preload-error`, `unresponsive`
-- **Erros de rede:** falhas CORS, TLS, DRM license, etc. (exceto `ERR_ABORTED`)
+- **Renderer processes:** eventos explícitos de `splashView`, `homeView`, `streamingView`, `loadingView` e `overlayView`
+- **Erros críticos por view:** `did-fail-load`, `render-process-gone`, `preload-error` e `unresponsive`
+- **GPU:** evento global `child-process-gone`
+- **Erros de rede:** um listener por sessão, atribuído por `webContentsId`, exceto `ERR_ABORTED`
+- **URLs:** credenciais, query e fragment são removidos dos logs explícitos
 
-### IPC Channels de Logging
+### Handlers internos de Logging
 | Canal | Descrição |
 |-------|-----------|
-| `logging:get-status` | Retorna config atual |
-| `logging:set-enabled` | Ativa/desativa (bool) |
-| `logging:set-level` | Muda nível (string) |
+| `logging:get-status` | Handler sem bridge atual |
+| `logging:set-enabled` | Handler sem bridge atual |
+| `logging:set-level` | Handler sem bridge atual |
 
 ---

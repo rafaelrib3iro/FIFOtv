@@ -13,8 +13,7 @@
 </head>
 <body oncontextmenu="return false;">
     <script>
-    // Override navigator properties to appear as a Smart TV
-    // Note: this is a fallback layer — the Chrome extension (tv-override) handles all external pages
+    // Override navigator properties for the local home renderer.
     Object.defineProperty(navigator, 'userAgent', {
         get: function() { return 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'; }
     });
