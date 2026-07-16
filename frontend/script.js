@@ -1376,9 +1376,14 @@ async function loadRemoteStatus() {
 
 async function toggleRemoteAccess() {
     try {
-        await window.fifotv.remoteToggle();
+        const result = await window.fifotv.remoteToggle();
         await loadRemoteStatus();
-    } catch (e) {}
+        if (result && result.error) {
+            showToast('Erro: ' + result.error);
+        }
+    } catch (e) {
+        showToast('Erro ao ativar acesso remoto');
+    }
 }
 
 let currentVolume = 50;

@@ -1,8 +1,10 @@
 const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, shell, screen, session, components, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
+const http = require('http');
 const os = require('os');
+const net = require('net');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -37,10 +39,12 @@ let appCommandAttached = false;
 let overlayMenuVisible = false;
 let remoteProcess = null;
 let remoteRunning = false;
+let remoteHealthTimer = null;
 let currentStreamingSlug = null;
 let powerSaveBlockerId = null;
 const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
 const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
+const SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
 const SPA_DOMAINS = new Set(['youtube']);
 
 function loadFreshConfig(relativePath) {
@@ -979,6 +983,139 @@ ipcMain.on('overlay:toast-hide', () => {
 });
 
 // ─── REMOTE ACCESS (opencode serve) ────────────────────────
+
+const SETTINGS_DEFAULT = { remoteEnabled: false };
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) {
+      return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    }
+  } catch (e) {
+    if (log) log.warn('[Settings] Erro ao ler settings.json:', e.message);
+  }
+  return { ...SETTINGS_DEFAULT };
+}
+
+function saveSettings(s) {
+  try {
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2));
+  } catch (e) {
+    if (log) log.warn('[Settings] Erro ao salvar settings.json:', e.message);
+  }
+}
+
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') resolve(false);
+      else resolve(false);
+    });
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port);
+  });
+}
+
+function stopRemoteProcess() {
+  return new Promise((resolve) => {
+    if (!remoteProcess) {
+      remoteRunning = false;
+      resolve();
+      return;
+    }
+    const pid = remoteProcess.pid;
+    if (log) log.info(`[Remote] Parando opencode (PID ${pid})...`);
+    remoteProcess.kill('SIGTERM');
+    const timeout = setTimeout(() => {
+      try {
+        process.kill(pid, 'SIGKILL');
+        if (log) log.warn(`[Remote] SIGKILL no PID ${pid}`);
+      } catch (_) {}
+      remoteProcess = null;
+      remoteRunning = false;
+      resolve();
+    }, 3000);
+    remoteProcess.on('exit', () => {
+      clearTimeout(timeout);
+      remoteProcess = null;
+      remoteRunning = false;
+      resolve();
+    });
+  });
+}
+
+function startRemoteProcess() {
+  return new Promise(async (resolve) => {
+    const free = await checkPort(3000);
+    if (!free) {
+      if (log) log.warn('[Remote] Porta 3000 ocupada, tentando liberar...');
+      exec('fuser -k 3000/tcp 2>/dev/null', { timeout: 3000 });
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    if (log) log.info('[Remote] Iniciando opencode serve...');
+    try {
+      remoteProcess = spawn('opencode', ['serve', '--port', '3000'], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      remoteProcess.unref();
+      remoteProcess.stdout.on('data', (d) => {
+        if (log) log.info(`[opencode] ${d.toString().trim()}`);
+      });
+      remoteProcess.stderr.on('data', (d) => {
+        if (log) log.warn(`[opencode] ${d.toString().trim()}`);
+      });
+      remoteProcess.on('error', (err) => {
+        if (log) log.error('[Remote] Erro ao iniciar:', err.message);
+        remoteRunning = false;
+        remoteProcess = null;
+        resolve({ running: false, error: err.message });
+      });
+      remoteProcess.on('exit', (code) => {
+        if (log) log.info(`[Remote] opencode encerrado (código ${code})`);
+        remoteRunning = false;
+        remoteProcess = null;
+        stopRemoteHealthCheck();
+      });
+      remoteRunning = true;
+      startRemoteHealthCheck();
+      resolve({ running: true });
+    } catch (e) {
+      if (log) log.error('[Remote] Falha ao iniciar:', e.message);
+      resolve({ running: false, error: e.message });
+    }
+  });
+}
+
+function startRemoteHealthCheck() {
+  stopRemoteHealthCheck();
+  remoteHealthTimer = setInterval(() => {
+    if (!remoteRunning) {
+      stopRemoteHealthCheck();
+      return;
+    }
+    const req = http.get('http://localhost:3000', (res) => {
+      if (log) log.verbose(`[Remote] Health check OK (${res.statusCode})`);
+      res.resume();
+    });
+    req.on('error', () => {
+      if (log) log.warn('[Remote] Health check falhou');
+    });
+    req.setTimeout(5000, () => req.destroy());
+  }, 60000);
+}
+
+function stopRemoteHealthCheck() {
+  if (remoteHealthTimer) {
+    clearInterval(remoteHealthTimer);
+    remoteHealthTimer = null;
+  }
+}
+
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -998,34 +1135,21 @@ ipcMain.handle('remote:status', () => {
   };
 });
 
-ipcMain.handle('remote:toggle', () => {
+ipcMain.handle('remote:toggle', async () => {
   if (remoteRunning) {
-    // Stop opencode serve
-    if (remoteProcess) {
-      remoteProcess.kill('SIGTERM');
-      remoteProcess = null;
-    }
-    remoteRunning = false;
+    await stopRemoteProcess();
+    const s = loadSettings();
+    s.remoteEnabled = false;
+    saveSettings(s);
     return { running: false };
   } else {
-    // Start opencode serve
-    try {
-      remoteProcess = exec('opencode serve --port 3000', { timeout: 30000 });
-      remoteProcess.on('error', (err) => {
-        console.error('[Remote] Erro:', err.message);
-        remoteRunning = false;
-        remoteProcess = null;
-      });
-      remoteProcess.on('exit', () => {
-        remoteRunning = false;
-        remoteProcess = null;
-      });
-      remoteRunning = true;
-      return { running: true };
-    } catch (e) {
-      console.error('[Remote] Falha ao iniciar:', e.message);
-      return { running: false, error: e.message };
+    const result = await startRemoteProcess();
+    if (result.running) {
+      const s = loadSettings();
+      s.remoteEnabled = true;
+      saveSettings(s);
     }
+    return result;
   }
 });
 
@@ -1035,6 +1159,15 @@ app.whenReady().then(async () => {
   if (components && components.whenReady) {
     await components.whenReady();
     console.log('[FIFOtv] Widevine CDM ready:', components.status());
+  }
+
+  // Auto-restart remote access if was enabled
+  const settings = loadSettings();
+  if (settings.remoteEnabled) {
+    if (log) log.info('[Remote] Auto-restart ativo pelo settings.json');
+    startRemoteProcess().then((r) => {
+      if (!r.running && log) log.warn('[Remote] Auto-restart falhou:', r.error);
+    });
   }
 
   const { width, height } = getViewBounds();
