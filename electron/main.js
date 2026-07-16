@@ -4,6 +4,28 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const os = require('os');
 
+// Logging configuration
+const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
+function loadLogConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(LOG_CONFIG_PATH, 'utf8'));
+  } catch {
+    return { enabled: true, level: 'info', file: '/var/log/fifotv/main.log', maxSize: 5242880, consoleOutput: false };
+  }
+}
+const logConfig = loadLogConfig();
+
+let log = null;
+if (logConfig.enabled) {
+  log = require('electron-log/main');
+  log.initialize({ preload: true });
+  log.transports.file.resolvePathFn = () => logConfig.file;
+  log.transports.file.level = logConfig.level;
+  log.transports.file.maxSize = logConfig.maxSize;
+  log.transports.console.level = logConfig.consoleOutput ? logConfig.level : false;
+  log.transports.ipc.level = logConfig.level;
+}
+
 let win = null;
 let homeView = null;
 let streamingView = null;
@@ -204,6 +226,79 @@ ipcMain.handle('system:info', () => {
 ipcMain.handle('system:screen-off', () => {
   exec('xset dpms force off');
   return { ok: true };
+});
+
+// ─── LOGGING CONTROL ─────────────────────────────────────────
+// Console override for file logging
+if (log) {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+
+  console.log = (...args) => { log.info(...args); originalLog.apply(console, args); };
+  console.error = (...args) => { log.error(...args); originalError.apply(console, args); };
+  console.warn = (...args) => { log.warn(...args); originalWarn.apply(console, args); };
+}
+
+// Helper: attach critical error listeners to any WebContentsView
+function attachRendererLogging(webContents, label) {
+  if (!webContents || webContents.isDestroyed()) return;
+
+  webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const prefix = `[Renderer:${label}]`;
+    if (level === 1) log?.info(prefix, message);
+    else if (level === 2) log?.warn(prefix, message);
+    else if (level === 3) log?.error(prefix, message);
+  });
+
+  webContents.on('did-fail-load', (event, code, desc, url, isMainFrame) => {
+    log?.error(`[Renderer:${label}] did-fail-load`, { code, desc, url, isMainFrame });
+  });
+
+  webContents.on('render-process-gone', (event, details) => {
+    log?.error(`[Renderer:${label}] render-process-gone`, details);
+  });
+
+  webContents.on('gpu-process-crashed', (event, killed) => {
+    log?.error(`[Renderer:${label}] GPU crashed`, { killed });
+  });
+
+  webContents.on('preload-error', (event, error) => {
+    log?.error(`[Renderer:${label}] preload-error`, error);
+  });
+
+  webContents.on('unresponsive', () => log?.warn(`[Renderer:${label}] unresponsive`));
+  webContents.on('responsive', () => log?.info(`[Renderer:${label}] responsive again`));
+
+  webContents.session.webRequest.onErrorOccurred((details) => {
+    if (details.error !== 'net::ERR_ABORTED') {
+      log?.warn(`[Network:${label}]`, details.method, details.url, '→', details.error);
+    }
+  });
+}
+
+// IPC: runtime logging control
+ipcMain.handle('logging:get-status', () => ({
+  fileEnabled: logConfig.enabled,
+  level: logConfig.level,
+  file: logConfig.file,
+  consoleOutput: logConfig.consoleOutput
+}));
+
+ipcMain.handle('logging:set-enabled', (_, enabled) => {
+  logConfig.enabled = enabled;
+  fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
+  return { ok: true, message: `Logging ${enabled ? 'enabled' : 'disabled'}. Restart app to apply.` };
+});
+
+ipcMain.handle('logging:set-level', (_, level) => {
+  const validLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
+  if (!validLevels.includes(level)) {
+    return { ok: false, error: `Invalid level. Use: ${validLevels.join(', ')}` };
+  }
+  logConfig.level = level;
+  fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
+  return { ok: true, message: `Log level set to ${level}. Restart app to apply.` };
 });
 
 // ─── VOLUME (wpctl) ────────────────────────────────────────
@@ -591,6 +686,7 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   streamingView.setBackgroundColor('#0a0816');
   streamingView.setBounds({ x: 0, y: 0, width, height });
   streamingView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  attachRendererLogging(streamingView.webContents, `streaming:${slug}`);
 
   // TV Identity — User-Agent + Client Hints headers (skip for Prime Video and Netflix)
   const skipTvIdentity = isPrimeVideo || slug === 'netflix';
@@ -687,6 +783,7 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
     path.join(__dirname, 'views', 'loading.html'),
     { query: { name: name || '', icon: iconPath } }
   );
+  attachRendererLogging(loadingView.webContents, 'loading');
 
   // Create overlay view
   overlayView = new WebContentsView({
@@ -699,6 +796,7 @@ ipcMain.handle('nav:open-streaming', (_, url, name, slug) => {
   overlayView.setBackgroundColor('#00000000');
   overlayView.setBounds({ x: 0, y: 0, width, height });
   overlayView.webContents.loadFile(path.join(__dirname, 'views', 'overlay.html'));
+  attachRendererLogging(overlayView.webContents, 'overlay');
 
   // NOTE: before-input-event on overlay was previously blocking arrow keys
   // when menu was open (prevented default + sendInputEvent), which broke
@@ -977,6 +1075,7 @@ app.whenReady().then(async () => {
   splashView.setBounds({ x: 0, y: 0, width, height });
   splashView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'splash.html'));
   addView(splashView);
+  attachRendererLogging(splashView.webContents, 'splash');
 
   // After 3.5s: remove splash, create and show homeView
   setTimeout(() => {
@@ -997,6 +1096,7 @@ app.whenReady().then(async () => {
     const { width: w, height: h } = getViewBounds();
     homeView.setBounds({ x: 0, y: 0, width: w, height: h });
     homeView.webContents.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+    attachRendererLogging(homeView.webContents, 'home');
 
     homeView.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;

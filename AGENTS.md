@@ -349,3 +349,81 @@ run();
 **User no all-in-one:** `tv`
 
 **Logs:** `journalctl -u fifotv -f`
+
+## Logging (electron-log)
+
+### Arquivo de configuração
+`/home/tv/smarttv/config/logging.json`
+
+```json
+{
+  "enabled": true,
+  "level": "info",
+  "file": "/var/log/fifotv/main.log",
+  "maxSize": 5242880,
+  "consoleOutput": false
+}
+```
+
+### Campos
+| Campo | Descrição |
+|-------|-----------|
+| `enabled` | Ativa/desativa logging em arquivo |
+| `level` | Nível: `error`, `warn`, `info`, `verbose`, `debug`, `silly` |
+| `file` | Caminho do arquivo de log (rotação automática em `maxSize`) |
+| `maxSize` | Tamanho máximo em bytes antes de rotacionar (default 5MB) |
+| `consoleOutput` | Se `true`, também imprime no stdout/journalctl |
+
+### Como ativar/desativar
+
+**Via arquivo (persistente, requer restart):**
+```bash
+# Desativar
+sed -i 's/"enabled": true/"enabled": false/' /home/tv/smarttv/config/logging.json
+
+# Ativar
+sed -i 's/"enabled": false/"enabled": true/' /home/tv/smarttv/config/logging.json
+
+# Mudar nível
+sed -i 's/"level": "info"/"level": "debug"/' /home/tv/smarttv/config/logging.json
+
+# Reiniciar app
+sudo systemctl restart fifotv
+```
+
+**Via IPC (runtime, requer restart para aplicar):**
+```bash
+# Ver status
+echo '{"id":1,"method":"logging:get-status"}' | nc -U /tmp/fifotv-socket
+
+# Ativar/desativar
+echo '{"id":1,"method":"logging:set-enabled","params":[false]}' | nc -U /tmp/fifotv-socket
+
+# Mudar nível
+echo '{"id":1,"method":"logging:set-level","params":["debug"]}' | nc -U /tmp/fifotv-socket
+```
+
+### Ver logs em tempo real
+```bash
+# Arquivo (recomendado - completo)
+tail -f /var/log/fifotv/main.log
+
+# journalctl (apenas main process + Chromium logs)
+journalctl -u fifotv -f
+```
+
+### O que é capturado
+- **Main process:** todos os `console.log/error/warn` (IPC handlers, BT, volume, navegação, etc.)
+- **Renderer processes (todas views):** via IPC transport automático
+  - `splashView`, `homeView`, `streamingView`, `loadingView`, `overlayView`
+- **Erros críticos por view:** `did-fail-load`, `render-process-gone`, `gpu-process-crashed`, `preload-error`, `unresponsive`
+- **Erros de rede:** falhas CORS, TLS, DRM license, etc. (exceto `ERR_ABORTED`)
+
+### IPC Channels de Logging
+| Canal | Descrição |
+|-------|-----------|
+| `logging:get-status` | Retorna config atual |
+| `logging:set-enabled` | Ativa/desativa (bool) |
+| `logging:set-level` | Muda nível (string) |
+
+---

@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "level": "info",
+  "file": "/var/log/fifotv/main.log",
+  "maxSize": 5242880,
+  "consoleOutput": false
+}
