@@ -2,23 +2,25 @@
 
 ## Escopo
 
-Este guia orienta mudanças no runtime aprovado em `docs/ACTIVE_RUNTIME_SCOPE.md` e descrito em `docs/ARCHITECTURE.md`. Não use Flask, Python, Chromium autônomo, extensão `tv-override`, Openbox, instalador ou ISO como referência para implementar comportamento Electron.
+Este guia orienta mudanças no runtime descrito em `docs/ARCHITECTURE.md`. O mapa e a ordem de autoridade estão em `docs/README.md`. Não use documentos de `docs/history/` ou `docs/research/` como prova de comportamento implementado.
 
 Antes de alterar um componente, prove que ele participa do grafo atual por `require`, preload, `loadFile`, `loadURL`, IPC, leitura de arquivo, recurso carregado ou processo iniciado.
 
 ## Iniciar e Inspecionar
 
-Desenvolvimento em janela:
+Início direto do Electron:
 
 ```bash
 npm run dev
 ```
 
-Modo kiosk do checkout:
+Mesmo runtime com o argumento `--kiosk` encaminhado:
 
 ```bash
 npm start
 ```
+
+O main não implementa atualmente um segundo modo de janela para esse argumento.
 
 Testes puros:
 
@@ -46,7 +48,7 @@ git diff --check
 git log --oneline --decorate -10
 ```
 
-Logging configurado nesta máquina:
+Logging local, quando habilitado:
 
 ```bash
 tail -f /var/log/fifotv/main.log
@@ -65,7 +67,7 @@ Use o fluxo abaixo, sem começar por documentação antiga:
 4. Encontre o método `window.fifotv` no renderer, se houver.
 5. Associe o canal ao `handleFrom`, `onFrom` ou `webContents.send` do main.
 6. Siga leituras de arquivo, comandos externos e módulos requeridos.
-7. Consulte `docs/ACTIVE_RUNTIME_SCOPE.md` para não misturar legado ou futuro.
+7. Consulte `docs/README.md` para não misturar runtime, pesquisa e histórico.
 
 Mapa rápido:
 
@@ -297,10 +299,10 @@ Se hardware não estiver disponível, registre o teste como pendente. Não marqu
 
 OpenCode não é funcionalidade normal do produto e não deve voltar à UI ou aos preloads.
 
-Condição aprovada nesta branch:
+Condição aprovada e preservada:
 
-- `config/settings.json` com `remoteEnabled: true` permite auto-start.
-- Ausência do arquivo ou valor `false` mantém o padrão desativado.
+- O arquivo versionado `config/settings.json` contém `remoteEnabled: true`, portanto o checkout atual tenta garantir o serviço em todo startup.
+- Ausência do arquivo, arquivo inválido ou valor `false` usa o fallback desativado.
 - Não foi aprovada uma condição `FIFOTV_DEV`.
 
 Não transforme o subsistema em produto durante manutenção da fundação. Autenticação, TLS, bind, firewall, PID ownership e supervisor pertencem a uma decisão futura separada.

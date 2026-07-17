@@ -1,4 +1,6 @@
-# Escopo Ativo do Runtime
+# Escopo Ativo do Runtime - Snapshot de Julho de 2026
+
+> **Documento histórico.** Este inventário registra a promoção da fundação Electron e não é a fonte do runtime atual. Consulte `docs/README.md` e `docs/ARCHITECTURE.md`.
 
 ## Status e finalidade
 

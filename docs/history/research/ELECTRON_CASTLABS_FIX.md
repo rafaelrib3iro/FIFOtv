@@ -1,5 +1,7 @@
 # Fix 2 — Widevine/DRM via Castlabs Electron
 
+> **Registro histórico.** Este documento preserva a investigação que levou à adoção do Electron Castlabs. Versões, comandos e hipóteses de provider são um snapshot e não substituem `package.json` ou `docs/ARCHITECTURE.md`.
+
 ## Contexto
 
 O FIFOtv é um Smart TV kiosk que precisa rodar streaming com DRM (Netflix, Disney+, etc.) no all-in-one Positivo Union UD3630 (Debian 13, display 1280x720).

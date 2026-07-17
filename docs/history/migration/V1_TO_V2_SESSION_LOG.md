@@ -1,6 +1,6 @@
 # FIFOtv — Plano de Sessões (Migração v1 → v2)
 
-> Registro histórico da migração. Caminhos da geração Flask/Chromium citados abaixo foram removidos após a consolidação e permanecem consultáveis na tag `electron-foundation-before-repository-cleanup`.
+> **Documento histórico.** Caminhos, branches, comandos e estados abaixo registram a migração e não devem ser usados como instruções atuais. Fontes removidas permanecem na tag `electron-foundation-before-repository-cleanup`.
 
 ## Visão Geral
 
@@ -206,7 +206,7 @@ Usuário clica em Netflix
 - `package.json`: `"electron": "https://github.com/castlabs/electron-releases#v42.3.3+wvcus"`
 - `electron/main.js`: import `components`, `components.whenReady()`, permission handlers `mediaKeySystem`, GTK 3 safety switch
 - `electron/main.js`: `goBack()` atualizado pra `navigationHistory.goBack()` (deprecated v32+)
-- `docs/ELECTRON-CASTLABS-FIX.md`: documentação completa
+- `docs/history/research/ELECTRON_CASTLABS_FIX.md`: registro histórico da investigação
 
 **Validação:**
 - ✅ Netflix play funciona — erro M7701-1003 sumiu
@@ -368,7 +368,7 @@ Usuário clica em Netflix
 3. `update.sh` criado — script de migração v1→v2
 4. `system/fifotv.service` criado — service systemd pro boot automático
 5. `system/.xinitrc` atualizado — mínimo (só xset + unclutter)
-6. `docs/DEPLOY-V2.md` criado — documentação completa de deploy
+6. Um guia de deploy v2 foi criado na época e posteriormente removido por estar obsoleto e inseguro
 7. Commit `4800e55` — 42 arquivos, 4593 linhas
 8. Push pro GitHub (branch `electron`)
 
@@ -396,7 +396,7 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 **Fluxo de trabalho:**
 1. Usuário testa funcionalidade no all-in-one
 2. Usuário reporta bug pra IA (ou diretamente ou via prompt)
-3. IA adiciona o bug em `docs/BUGS.md`
+3. IA adiciona o bug no registro que hoje está em `docs/history/migration/V2_MIGRATION_BUGS.md`
 4. IA diagnostica o bug via SSH + leitura de código
 5. IA corrige o bug, commita e faz push
 6. Usuário atualiza o all-in-one (`git pull && sudo systemctl restart fifotv`)
@@ -409,7 +409,7 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 > "Atualiza o all-in-one" (IA faz pull + restart via SSH)
 
 **Arquivos de referência:**
-- `docs/BUGS.md` — Lista de bugs e status
+- `docs/history/migration/V2_MIGRATION_BUGS.md` — registro histórico de bugs e status
 
 **Entregável:** Todos os bugs reportados corrigidos e validados no hardware real.
 
@@ -420,13 +420,13 @@ b31e8b5 docs: Sessão 5 concluída, Session 6 atualizada com deploy via systemd
 **Objetivo:** Rodar o v2 no hardware real (Positivo Union UD3630).
 
 **Pré-requisitos:**
-- All-in-one ligado e acessível via SSH (`tv@IP`, senha: `fifotv`)
+- All-in-one ligado e acessível via SSH (`tv@IP`; credencial gerenciada fora do repositório)
 - Git e Node.js 22 já instalados (do v1)
 
 **O que acontece:**
 1. Revisar scripts de deploy: `setup.sh` (remover dependências v1 como Flask, Openbox, Chromium), `update.sh` (adicionar reinstalação do service + instalação de pacotes faltantes), `deploy.sh` (remover referências v1)
 2. No all-in-one: rodar `bash update.sh` (faz pull, npm install, instala pacotes, reinstala service, reinicia)
-3. OU pedir pra IA: "Lê `docs/DEPLOY-V2.md` e executa todos os passos"
+3. O guia executável usado na época foi removido; não reutilizar aquele procedimento no runtime atual
 4. Após reboot, FIFOtv v2 inicia automaticamente via systemd
 5. Testar: air mouse, D-pad, Bluetooth real, Wi-Fi real, volume real, streaming na TV
 6. Corrigir bugs de hardware
@@ -439,7 +439,7 @@ journalctl -u fifotv -f         # Ver logs
 sudo systemctl restart fifotv   # Reiniciar
 ```
 
-**Rollback:** Seguir seção "Rollback" em `docs/DEPLOY-V2.md` (volta pro branch `main`)
+**Rollback histórico:** o procedimento citado na época foi removido porque branches, serviço e arquitetura mudaram. Não usar `main` atual como rollback da v1.
 
 **Entregável:** v2 rodando no all-in-one, todas as funcionalidades básicas funcionando.
 

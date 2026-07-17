@@ -2,7 +2,7 @@
 
 ## Uso
 
-Este checklist cobre somente comportamentos classificados como ativos em `docs/ACTIVE_RUNTIME_SCOPE.md`. Registre cada item como:
+Este checklist cobre comportamentos descritos em `docs/ARCHITECTURE.md` e separa ferramentas de desenvolvimento do fluxo normal do produto. Registre cada item como:
 
 - `[x] Aprovado`: executado e sem regressão.
 - `[ ] Pendente`: ainda não executado ou ambiente indisponível.
@@ -78,7 +78,7 @@ Status: `[ ]`
 
 Status: `[ ]`
 
-**Preparação:** Settings acessível; definir app de teste com nome literal `TV "Sala" <teste>`, slug válido e URL HTTP/HTTPS segura.
+**Preparação:** Settings acessível; definir app de teste com nome literal `TV "Sala" <teste>` e URL HTTP/HTTPS segura. O slug será derivado pela aplicação.
 
 **Ações:** adicionar; verificar card/lista; mover para cima e para baixo; remover pelo X; confirmar o foco após cada operação.
 
@@ -162,7 +162,7 @@ Status: `[ ]`
 
 Status: `[ ]`
 
-**Preparação:** home aberta; tempo disponível para o timeout real de 15 minutos.
+**Preparação:** home aberta; tempo disponível para o screensaver de 15 minutos e, quando o teste alcançar DPMS, para o timeout de 60 minutos.
 
 **Ações:** deixar inativo até o screensaver; pressionar tecla/mover controle; abrir streaming e verificar que atividade reseta timers; retornar à home.
 
@@ -180,17 +180,19 @@ Status: `[ ]`
 
 **Ações:** abrir o app; aguardar falha/retorno; procurar labels de renderer/rede e o marcador `SEGREDO`; remover o app de teste.
 
-**Esperado:** falha do frame principal retorna à home uma vez; label corresponde à view; log pode mostrar `https://nao-existe.invalid/teste`, mas nunca credenciais, query, fragment ou `SEGREDO`.
+**Esperado:** falha do frame principal retorna à home uma vez; label corresponde à view; campos estruturados do main podem mostrar `https://nao-existe.invalid/teste`, mas nunca credenciais, query, fragment ou `SEGREDO`. Mensagens arbitrárias de console de páginas externas não possuem garantia geral de redaction e devem ser tratadas como não confiáveis.
 
 **Regressões a observar:** loop de reload, tela presa, label `overlay` para toda falha, URL completa ou token no log.
 
 **Evidência em falha:** linhas relevantes do log com segredo censurado na comunicação externa.
 
-## E12 — OpenCode fora da UI normal
+# Ferramenta De Desenvolvimento
+
+## T01 — OpenCode fora da UI normal
 
 Status: `[ ]`
 
-**Preparação:** anotar o valor local de `config/settings.json`; abrir home e Settings.
+**Preparação:** anotar o valor versionado de `config/settings.json`; abrir home e Settings.
 
 **Ações:** iniciar `opencode serve --port 3000` manualmente; confirmar ausência de acesso remoto na UI; com `remoteEnabled: true` nesta máquina de desenvolvimento, abrir e fechar o FIFOtv e confirmar que o processo manual continua acessível; não alterar o valor durante a regressão.
 
@@ -387,6 +389,7 @@ Status: `[ ]`
 | Categoria | Aprovados | Pendentes | Reprovados | Não aplicáveis |
 |---|---:|---:|---:|---:|
 | Essenciais | | | | |
+| Ferramenta de desenvolvimento | | | | |
 | Hardware | | | | |
 | Debian/Castlabs | | | | |
 | Matriz principal de providers | | | | |
@@ -402,6 +405,6 @@ A regressão candidata à promoção exige:
 - Itens de hardware/ambiente executados quando o recurso estiver disponível; impossibilidades registradas como pendentes.
 - Matriz principal de providers executada com resultado explícito.
 - Login, DRM e playback não declarados aprovados sem conta/execução real.
-- Logs sem query, fragment, credencial, senha ou token.
-- OpenCode ausente da UI normal e preservado somente pelo comportamento de desenvolvimento aprovado.
+- Campos estruturados de rede/injeção sem query, fragment, credencial, senha ou token; console externo tratado como conteúdo não confiável.
+- Quando a mudança alcançar o subsistema OpenCode, T01 aprovado; em qualquer regressão, OpenCode ausente da UI normal.
 - `npm run check` e `git diff --check` aprovados no mesmo estado de código testado.

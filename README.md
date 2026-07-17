@@ -85,7 +85,7 @@ npm install
 npm run dev
 ```
 
-Para iniciar em modo de tela cheia:
+O script `start` inicia o mesmo runtime e encaminha o argumento operacional `--kiosk`:
 
 ```bash
 npm start
@@ -99,18 +99,19 @@ Os comandos principais são:
 
 | Comando | Descrição |
 | --- | --- |
-| `npm run dev` | Inicia o FIFOtv em modo de desenvolvimento |
-| `npm start` | Inicia o FIFOtv em modo kiosk |
+| `npm run dev` | Inicia o Electron diretamente |
+| `npm start` | Inicia o mesmo runtime e encaminha `--kiosk` |
+
+A documentação técnica, a arquitetura e os procedimentos de validação estão organizados em [`docs/README.md`](docs/README.md).
 
 ## Roadmap
 
 - [ ] Publicar a primeira release oficial
-- [ ] Criar executáveis oficiais para Linux e Windows
+- [ ] Criar uma distribuição oficial
 - [ ] Melhorar a navegação por controle remoto e D-pad
 - [ ] Expandir as adaptações específicas para cada serviço
-- [ ] Criar um runtime capaz de executar aplicações nativas de webOS
 
-Hoje, o FIFOtv trabalha principalmente com sites desktop e adaptações próprias para aproximar a navegação da experiência de uma Smart TV. No futuro, a ideia é avançar para um runtime que também consiga executar aplicações nativas de webOS.
+Hoje, o FIFOtv trabalha com sites web e adaptações próprias para aproximar a navegação da experiência de uma Smart TV.
 
 ## Contribuindo
 

@@ -1,11 +1,13 @@
 ---
 plan name: webcontentsview-fix
 plan description: Fix migration bugs: IPC crash, flash, homeView
-plan status: active
+plan status: done
 ---
 
+> **Incidente histórico resolvido.** Este plano explica decisões da composição com `WebContentsView`; não representa trabalho pendente.
+
 ## Idea
-Corrigir 5 bugs críticos da migração 2-window → 1-window+WebContentsViews: (1) Crash ao destruir overlay.webContents dentro do handler IPC nav:go-home — defer com setImmediate; (2) Flash branco causado pelo webContents about:blank do BrowserWindow — homeView nunca sai do contentView; (3) webContents.close() → .destroy() para destruição forçada; (4) Icon path vazio no loading.html; (5) homeView removido/re-adicionado causa flash —改为 nunca remover, streaming views ficam por cima.
+Corrigir 5 bugs críticos da migração 2-window → 1-window+WebContentsViews: (1) Crash ao destruir overlay.webContents dentro do handler IPC nav:go-home — defer com setImmediate; (2) Flash branco causado pelo webContents about:blank do BrowserWindow — homeView nunca sai do contentView; (3) webContents.close() → .destroy() para destruição forçada; (4) Icon path vazio no loading.html; (5) homeView removido/re-adicionado causa flash — nunca remover, streaming views ficam por cima.
 
 ## Implementation
 - main.js nav:go-home — usar setImmediate() para defer destroyStreamingViews() e addView(homeView), evitando destruir overlay.webContents durante IPC handler

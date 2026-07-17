@@ -2,16 +2,18 @@
 
 ## Escopo
 
-Esta arquitetura deriva exclusivamente do inventário aprovado em `docs/ACTIVE_RUNTIME_SCOPE.md`. Ela descreve o runtime Electron executado a partir deste checkout e não trata Flask, Chromium autônomo, Openbox, ISO, instalador, updater, pacote ou boot como partes implementadas da fundação atual.
+Esta é a fonte técnica do runtime Electron da branch atual. Ela deriva do código, das configurações versionadas e dos testes; `docs/README.md` define a ordem de autoridade da documentação.
 
-O systemd instalado é somente uma fronteira ambiental observada: ele pode iniciar o checkout em modo kiosk. O único arquivo versionado em `system/`, `.xinitrc`, é um helper local de Xorg e não integra a arquitetura ativa.
+O systemd instalado é somente uma fronteira ambiental observada: ele pode iniciar o checkout encaminhando `--kiosk`. O único arquivo versionado em `system/`, `.xinitrc`, é um helper local de Xorg e não integra a arquitetura ativa.
 
 ## Bootstrap
 
-`package.json` define `electron/main.js` como entrada. Há dois modos diretos:
+`package.json` define `electron/main.js` como entrada. Há dois scripts diretos:
 
-- `npm run dev`: `electron .`, em janela de desenvolvimento.
-- `npm start`: `electron . --kiosk`.
+- `npm run dev`: executa `electron .`.
+- `npm start`: executa o mesmo runtime e encaminha `--kiosk`.
+
+O main não consome atualmente esse argumento para criar um segundo modo de janela. Nos dois casos, a janela é criada sem frame e dimensionada para o display.
 
 No aparelho inspecionado, uma unidade externa em `/etc/systemd/system/fifotv.service` aponta para o Electron Castlabs instalado em `node_modules`, usa este checkout como diretório de trabalho e adiciona `--kiosk`. A configuração operacional completa desse serviço fica fora do escopo da fundação.
 
@@ -93,7 +95,7 @@ O streaming nunca é removido do compositor para mostrar o overlay. Essa decisã
 
 ### Streaming preload
 
-`electron/preload-streaming.js` não expõe `window.fifotv`, `contextBridge` ou `ipcRenderer`. Ele aplica a identidade JavaScript do contexto de streaming. A política de identidade e suas exceções por provider foram preservadas; mudanças adicionais dependem de validação específica de login, DRM e playback.
+`electron/preload-streaming.js` não expõe `window.fifotv`, `contextBridge` ou `ipcRenderer`. Ele tenta aplicar a identidade JavaScript do contexto de streaming, enquanto o main controla User-Agent e Client Hints de rede. Netflix e Prime possuem exceções diferentes entre essas camadas. Nem todos os descriptors de `navigator` e `screen` são garantidos pelo Chromium atual; identidade efetiva precisa ser medida por provider. Mudanças dependem de validação específica de login, DRM e playback.
 
 ## IPC e Fronteiras de Privilégio
 
@@ -151,7 +153,7 @@ A URL do catálogo é normalizada antes da seleção. YouTube é reconhecido por
 
 Ordem do pipeline:
 
-1. Polyfill de navegação espacial, quando habilitado pelo slug.
+1. Polyfill de navegação espacial, habilitado por padrão e desabilitado explicitamente por slug quando necessário.
 2. Helpers compartilhados.
 3. Atribuição do slug corrente.
 4. Configuração espacial por slug.
@@ -190,13 +192,13 @@ Essas integrações dependem do Debian e do hardware. Inspeção estática não 
 
 `attachRendererLogging()` registra console, falha de load, renderer encerrado, preload, responsividade e cleanup. `electron/runtime-logging.js` mantém um único listener `onErrorOccurred` por sessão e atribui falhas usando `webContentsId`.
 
-URLs em logs explícitos removem credenciais, query e fragment. `net::ERR_ABORTED` é ignorado no listener de rede. Falhas GPU usam o evento global `child-process-gone` e não recebem label falso de view.
+URLs estruturadas pelo main nos logs de rede e injeção removem credenciais, query e fragment. `net::ERR_ABORTED` é ignorado no listener de rede. Falhas GPU usam o evento global `child-process-gone` e não recebem label falso de view. Mensagens de console emitidas por páginas externas são conteúdo não confiável e não possuem garantia geral de redaction.
 
 ## Ferramentas de Desenvolvimento
 
 `scripts/dev.sh`, `scripts/keytest.js`, `frontend/keytest.html` e `test/` são ferramentas de desenvolvimento/diagnóstico, não componentes do produto.
 
-OpenCode também é classificado exclusivamente como ferramenta de desenvolvimento. Ele não aparece na home nem nos preloads normais. Por decisão explícita do usuário, o comportamento atual foi preservado: `config/settings.json` pode habilitar seu auto-start por `remoteEnabled`, cujo padrão é `false`. Nesta máquina de desenvolvimento o arquivo contém `true`. Não foi adicionada a condição `FIFOTV_DEV`. Uma porta 3000 ocupada é preservada como processo externo; um processo iniciado pelo Electron usa sessão destacada sem pipes e não depende do encerramento da TV.
+OpenCode também é classificado exclusivamente como ferramenta de desenvolvimento. Ele não aparece na home nem nos preloads normais. Por decisão explícita do usuário, o comportamento atual foi preservado: o arquivo versionado `config/settings.json` contém `remoteEnabled: true`, portanto o checkout atual tenta garantir o serviço em todo startup. O fallback do código é `false` quando o arquivo está ausente ou inválido. Não foi adicionada a condição `FIFOTV_DEV`. Uma porta 3000 ocupada é preservada como processo externo; um processo iniciado pelo Electron usa sessão destacada sem pipes e não depende do encerramento da TV.
 
 Os handlers `remote:*` permanecem sem bridge. Isso não transforma OpenCode em funcionalidade suportada da TV. Autenticação, TLS, bind, firewall, ownership e supervisão de produto estão fora desta fundação.
 
@@ -215,15 +217,14 @@ Os handlers `remote:*` permanecem sem bridge. Isso não transforma OpenCode em f
 
 ## Limitações e Backlog
 
-Não fazem parte da arquitetura implementada:
+Não fazem parte da arquitetura implementada ou suportada:
 
 - Flask/Python/Chromium/Openbox e extensão v1.
 - ISO, instalador, boot, Plymouth e autologin.
-- Updater e canal de distribuição.
-- `.deb`, AppImage e release reproduzível.
+- Updater e canal de distribuição; os scripts legados existentes falham de forma explícita.
+- `.deb`, AppImage e release reproduzível. Os comandos estão declarados, mas o `build.files` não inclui catálogo/configuração e a persistência ainda escreve no checkout.
 - Migração completa para `userData`.
-- Limpeza física de todo legado.
 - Endurecimento amplo de spoofing/customizações sem reprodução.
 - OpenCode como funcionalidade suportada de produto.
 
-Recursos sem referência comprovada e arquivos operacionais canônicos permanecem fora da arquitetura ativa, conforme `docs/ACTIVE_RUNTIME_SCOPE.md`.
+Registros da consolidação e dos componentes removidos permanecem em `docs/history/` e nas tags de preservação listadas em `docs/README.md`.

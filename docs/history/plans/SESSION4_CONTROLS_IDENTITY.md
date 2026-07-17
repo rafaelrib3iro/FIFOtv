@@ -4,7 +4,7 @@ plan description: D-pad injection + TV identity
 plan status: archived
 ---
 
-Plano concluído e arquivado. Referências à extensão Chromium removida podem ser consultadas na tag `electron-foundation-before-repository-cleanup`.
+> **Plano histórico e substituído.** Referências à arquitetura, aos canais e à extensão Chromium refletem a época da sessão. Consulte `docs/ARCHITECTURE.md` para o runtime atual.
 
 ## Idea
 

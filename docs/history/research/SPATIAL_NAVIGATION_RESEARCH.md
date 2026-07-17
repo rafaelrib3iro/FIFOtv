@@ -1,6 +1,6 @@
 # FIFOtv — Pesquisa: Arquitetura de Navegação Espacial
 
-> Documento central de estudo e organização. Atualizado em Sessão 6.5+.
+> **Pesquisa histórica.** Este estudo antecede a implementação atual e preserva alternativas consideradas. Seções chamadas de "arquitetura atual" refletem o momento da pesquisa; consulte `docs/ARCHITECTURE.md` para o runtime vigente.
 
 ---
 

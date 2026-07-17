@@ -1,5 +1,7 @@
 # Decisões Arquiteturais Consolidadas
 
+> **Plano concluído e histórico.** As macroetapas descritas aqui já foram executadas. Este arquivo preserva o processo; não é backlog nem fonte de verdade atual.
+
 As decisões abaixo são premissas desta fase. Uma sessão futura não deve reabri-las sem nova evidência concreta e aprovação explícita.
 
 1. Electron permanece como a arquitetura oficial e como o único runtime ativo considerado neste plano.
@@ -20,7 +22,7 @@ As decisões abaixo são premissas desta fase. Uma sessão futura não deve reab
 
 # Como Usar Este Plano
 
-Este documento é a fonte oficial de execução da limpeza da fundação Electron. `docs/FOUNDATION_REVIEW.md` e `docs/FOUNDATION_REVIEW_CRITIQUE.md` permanecem como evidência e justificativa, não como listas paralelas de tarefas.
+Durante a execução original, este documento foi a fonte oficial da limpeza da fundação Electron. Hoje ele é somente um registro histórico; `docs/README.md` define as fontes vigentes.
 
 ## Cinco Sessões Principais
 

@@ -1,6 +1,6 @@
 # FIFOtv v2 — Bugs Reportados
 
-> Registro histórico de reproduções e correções. Não use este arquivo isoladamente como inventário do runtime atual. A fonte aprovada é `docs/ACTIVE_RUNTIME_SCOPE.md`; referências a fontes removidas permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
+> **Documento histórico.** Este arquivo registra bugs da migração e suas correções na época. Não representa problemas atuais; consulte `docs/README.md` e `docs/ARCHITECTURE.md`.
 
 ## Status
 
@@ -366,6 +366,6 @@ streamingView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 2. `before-input-event` no `overlayView.webContents`: mesma lógica quando `overlayMenuVisible` é true
 3. CSS `*:focus { outline: none }` em `overlay.css` e `style.css` pra remover highlight visual
 
-**Pesquisa de alternativas:** `docs/SPATIAL-NAVIGATION-RESEARCH.md` — `js-spatial-navigation` é melhor que o nativo do Chromium pra streaming pages (Fase 2, sessão futura).
+**Pesquisa de alternativas na época:** `docs/history/research/SPATIAL_NAVIGATION_RESEARCH.md`. O resultado vigente está descrito em `docs/ARCHITECTURE.md`.
 
 **Arquivos:** `electron/main.js`, `electron/views/overlay.js`, `electron/views/overlay.css`, `frontend/script.js`, `frontend/style.css`

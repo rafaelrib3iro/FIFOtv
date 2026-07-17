@@ -1,8 +1,10 @@
 ---
 plan name: session45-tv-mode
 plan description: Customização de interface dos streamings para modo TV
-plan status: done
+plan status: partially implemented / superseded
 ---
+
+> **Plano histórico.** Parte das customizações foi implementada e parte permaneceu experimental. A configuração vigente está no código e em `docs/ARCHITECTURE.md`.
 
 ## Idea
 O script específico do Prime Video foi posteriormente desabilitado por regressão de playback e removido na limpeza física; o provider continua explicitamente mapeado para `null`.

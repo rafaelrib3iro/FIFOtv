@@ -1,6 +1,6 @@
 # Revisão Arquitetural FIFOtv
 
-> Documento histórico do baseline `9b31cec`. Fontes legadas citadas nesta revisão foram removidas após a consolidação e permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
+> **Documento histórico do baseline `9b31cec`.** Não use caminhos, linhas ou conclusões daqui como estado atual. Fontes removidas permanecem na tag `electron-foundation-before-repository-cleanup`; a fonte técnica atual é `docs/ARCHITECTURE.md`.
 
 Revisão estática da branch `refactor/electron-foundation`, commit `9b31cec`. Nenhum arquivo foi alterado, nenhuma dependência foi instalada e a aplicação não foi executada. O único item não versionado já existente é `.directory`.
 
@@ -123,7 +123,7 @@ Todas estão concentradas em `electron/main.js`:
 
 2. **Uma única janela real.** Reduz complexidade de kiosk, compositor e consumo em hardware fraco.
 
-3. **Streaming nunca removido para exibir menu ou toast.** Essa decisão corrigiu flashes e perda de foco, conforme `docs/BUGS.md:193-206`.
+3. **Streaming nunca removido para exibir menu ou toast.** Essa decisão corrigiu flashes e perda de foco, conforme o registro hoje preservado em `docs/history/migration/V2_MIGRATION_BUGS.md`.
 
 4. **Home e overlay endurecidos.** Ambos usam `contextIsolation: true` e `nodeIntegration: false`.
 

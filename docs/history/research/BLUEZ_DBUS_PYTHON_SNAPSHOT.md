@@ -1,4 +1,6 @@
-# BlueZ D-Bus API Comprehensive Reference
+# BlueZ D-Bus API Research Snapshot
+
+> **Pesquisa histórica da geração Python.** O FIFOtv atual usa `dbus-next` no Electron. Exemplos, recomendações e informações de ambiente abaixo são um snapshot, não orientação para o runtime atual.
 ## For Smart TV Application — Debian 13 (Trixie) / BlueZ 5.82 / Python 3.13.5
 
 ---
@@ -31,7 +33,7 @@
 | BlueZ | 5.82 |
 | dbus-python | 1.4.0 |
 | D-Bus daemon | 1.16.2 |
-| Adapter MAC | 64:32:A8:21:0F:CE |
+| Adapter MAC | `<ADAPTER_MAC>` (redigido) |
 | Adapter Name | localhost |
 | Adapter Class | 0x00400104 (Computer / Desktop) |
 | Adapter Powered | Yes |
@@ -39,8 +41,8 @@
 | BLE Advertising | Supported (5 instances, tx-power/appearance/local-name includes) |
 
 Currently paired/known devices on this system:
-- `9B:FC:9A:4F:FD:A4` — PBS30 (Audio/Video headset, paired, trusted, not connected)
-- `E0:2B:96:E2:F0:C5` — iPhone de Rafael (Phone, not paired, trusted, not connected)
+- `<AUDIO_DEVICE_MAC>` — Audio/Video headset (paired, trusted, not connected)
+- `<PHONE_MAC>` — Phone (not paired, trusted, not connected)
 
 ---
 
@@ -91,7 +93,7 @@ This is the root interface for enumerating all BlueZ objects.
 **Return type breakdown:**
 ```
 a{oa{sa{sv}}}
-  o        = object path (e.g., "/org/bluez/hci0/dev_9B_FC_9A_4F_FD_A4")
+  o        = object path (e.g., "/org/bluez/hci0/dev_DEVICE_MAC")
   sa{sv}   = dict of interface_name → {property_name → value}
     s      = interface name (e.g., "org.bluez.Device1")
     a{sv}  = properties dict
@@ -134,7 +136,7 @@ for path, interfaces in objects.items():
 
 | Property | Type | Writable | Description |
 |---|---|---|---|
-| `Address` | `s` (string) | No | Bluetooth adapter MAC address (e.g., "64:32:A8:21:0F:CE") |
+| `Address` | `s` (string) | No | Bluetooth adapter MAC address (e.g., `<ADAPTER_MAC>`) |
 | `AddressType` | `s` (string) | No | "public" or "random" |
 | `Name` | `s` (string) | No | System name of the adapter |
 | `Alias` | `s` (string) | Yes | User-friendly name (writable) |
@@ -218,7 +220,7 @@ The MAC address in the path uses underscores instead of colons.
 
 | Property | Type | Writable | Description |
 |---|---|---|---|
-| `Address` | `s` (string) | No | Device MAC address (e.g., "9B:FC:9A:4F:FD:A4") |
+| `Address` | `s` (string) | No | Device MAC address (e.g., `<DEVICE_MAC>`) |
 | `AddressType` | `s` (string) | No | "public" or "random" |
 | `Name` | `s` (string) | No | Device name from Bluetooth |
 | `Alias` | `s` (string) | Yes | User-friendly alias (writable) |
@@ -261,7 +263,7 @@ The MAC address in the path uses underscores instead of colons.
 import dbus
 
 bus = dbus.SystemBus()
-device_path = '/org/bluez/hci0/dev_9B_FC_9A_4F_FD_A4'
+device_path = '/org/bluez/hci0/dev_DEVICE_MAC'
 proxy = bus.get_object('org.bluez', device_path)
 device = dbus.Interface(proxy, 'org.bluez.Device1')
 props = dbus.Interface(proxy, 'org.freedesktop.DBus.Properties')
@@ -374,8 +376,8 @@ Only needed if you want the Smart TV to advertise itself as a BLE device.
 The device object path uses the MAC address with underscores instead of colons:
 
 ```
-MAC:       9B:FC:9A:4F:FD:A4
-Path:      /org/bluez/hci0/dev_9B_FC_9A_4F_FD_A4
+MAC:       <DEVICE_MAC>
+Path:      /org/bluez/hci0/dev_DEVICE_MAC
 ```
 
 **Python helper:**
@@ -808,7 +810,7 @@ def connect_device(mac, adapter_path='/org/bluez/hci0', timeout=15):
     Connect to a Bluetooth device.
 
     Args:
-        mac: MAC address string (e.g., "9B:FC:9A:4F:FD:A4")
+        mac: MAC address string (e.g., "<DEVICE_MAC>")
         adapter_path: adapter D-Bus path
         timeout: max seconds to wait for connection
 
@@ -1528,9 +1530,9 @@ class BluetoothManager:
     Usage:
         mgr = BluetoothManager()
         devices = mgr.scan()
-        mgr.connect("AA:BB:CC:DD:EE:FF")
+        mgr.connect("<DEVICE_MAC>")
         status = mgr.status()
-        mgr.disconnect("AA:BB:CC:DD:EE:FF")
+        mgr.disconnect("<DEVICE_MAC>")
     """
 
     def __init__(self, adapter_path: str = DEFAULT_ADAPTER_PATH, register_agent: bool = True):
@@ -1797,7 +1799,7 @@ for d in devices:
     print(f"{d['mac']} - {d['name']} ({d['device_type']}) - {d['class_name']}")
 
 # Connect
-result = mgr.connect("9B:FC:9A:4F:FD:A4")
+result = mgr.connect("<DEVICE_MAC>")
 print(result)
 
 # Status
@@ -1806,14 +1808,14 @@ for d in all_paired:
     print(f"{d['mac']} - {d['name']} - Connected: {d['connected']}")
 
 # Single device status
-info = mgr.status("9B:FC:9A:4F:FD:A4")
+info = mgr.status("<DEVICE_MAC>")
 print(info)
 
 # Disconnect
-mgr.disconnect("9B:FC:9A:4F:FD:A4")
+mgr.disconnect("<DEVICE_MAC>")
 
 # Remove (unpair)
-mgr.remove("9B:FC:9A:4F:FD:A4")
+mgr.remove("<DEVICE_MAC>")
 ```
 
 ---
@@ -1836,7 +1838,7 @@ mgr.remove("9B:FC:9A:4F:FD:A4")
 
 5. **BLE devices need `ServicesResolved`** — For BLE devices, `Connected=True` is not enough. You must also wait for `ServicesResolved=True` before the device's GATT services are available.
 
-6. **Device path encoding** — MAC `9B:FC:9A:4F:FD:A4` becomes path `.../dev_9B_FC_9A_4F_FD_A4`. The colons are replaced with underscores, and the path uses uppercase hex.
+6. **Device path encoding** — a device MAC becomes a path such as `.../dev_DEVICE_MAC`, with colons replaced by underscores and uppercase hex.
 
 7. **ObjectManager `GetManagedObjects()` returns ALL objects** — This includes the adapter itself, the agent, and all devices. Filter for `org.bluez.Device1` interface to get only devices.
 

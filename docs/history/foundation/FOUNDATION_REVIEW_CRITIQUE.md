@@ -1,10 +1,10 @@
 # Crítica da Revisão Arquitetural da Fundação Electron
 
-> Documento histórico anterior à limpeza física. Fontes legadas citadas permanecem disponíveis na tag `electron-foundation-before-repository-cleanup`.
+> **Documento histórico anterior à limpeza física.** Esta crítica complementa a revisão preservada neste diretório. A fonte técnica atual é `docs/ARCHITECTURE.md`.
 
 ## Escopo e método
 
-Esta é uma auditoria da revisão em `docs/FOUNDATION_REVIEW.md`, não uma nova revisão arquitetural. A análise foi feita sobre o estado atual da branch e por leitura estática do runtime Electron, frontend, preloads, customizações, manifestos e scripts relevantes. Não houve instalação de dependências, execução da aplicação, acesso a serviços de streaming, testes no hardware ou alteração de código de produção.
+Esta é uma auditoria de `docs/history/foundation/FOUNDATION_REVIEW.md`, não uma nova revisão arquitetural. A análise foi feita sobre o estado da branch naquele momento e por leitura estática do runtime Electron, frontend, preloads, customizações, manifestos e scripts relevantes. Não houve instalação de dependências, execução da aplicação, acesso a serviços de streaming, testes no hardware ou alteração de código de produção.
 
 O contexto adicional muda a classificação de parte do documento original: Electron é o único runtime ativo; Flask/Python e parte dos scripts operacionais são legados históricos; ISO, boot, instalador, empacotamento e updater não pertencem à limpeza atual; e OpenCode é ferramenta local de desenvolvimento, não funcionalidade final do produto. Esse contexto não reduz os defeitos do runtime Electron, mas impede tratá-los como bloqueadores desta fundação quando pertencem a outra frente de trabalho.
 
@@ -268,4 +268,4 @@ Resultado esperado: a branch tem fronteiras mais seguras, comportamento caracter
 
 **Recomendações a remover, alterar ou adiar:** remover do plano atual consolidação de instalador/boot/ISO e endurecimento de OpenCode como produto; alterar a canonicalização de providers para uma correção mínima guiada por aliases/hostname; adiar build, updater, lockfile, release, migração completa de persistência, modularização ampla e mudanças de spoofing até validação prática.
 
-Esta auditoria modificou somente `docs/FOUNDATION_REVIEW_CRITIQUE.md`.
+Na sessão original, esta auditoria modificou somente o arquivo que hoje está preservado em `docs/history/foundation/FOUNDATION_REVIEW_CRITIQUE.md`.
