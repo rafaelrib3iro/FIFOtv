@@ -8,6 +8,28 @@ Antes de alterar um componente, prove que ele participa do grafo atual por `requ
 
 ## Iniciar e Inspecionar
 
+### Contextos de execução
+
+O FIFOtv mantém uma única implementação Electron para o produto. Os contextos com diferenças técnicas reais são desenvolvimento no macOS, desenvolvimento no Linux/Debian e visualização local da home no navegador. Homologação no all-in-one e uso como appliance compartilham o runtime Linux; o que muda é o procedimento operacional e a validação física.
+
+| Contexto | Comando ou entrada | Papel |
+|---|---|---|
+| Desenvolvimento no macOS | `npm run dev:mac` | Perfil macOS para trabalhar na interface e no runtime sem depender de BlueZ. |
+| Desenvolvimento no Linux | `npm run dev` | Electron direto com o runtime Linux atual. |
+| Homologação no all-in-one | `npm run appliance` ou systemd externo | Mesmo runtime Debian, validado pelo checklist manual e pelo hardware real. |
+| Appliance Debian | systemd externo; `npm run appliance` para início manual | Execução normal no aparelho. |
+| Visual em navegador | `npm run visual` | Home em URL local, sem hardware, DRM ou streaming integrado. |
+
+`npm run appliance` e `npm start` encaminham hoje o mesmo argumento `--kiosk`; não há um segundo modo de janela implementado no main.
+
+### Visualizar a home no navegador
+
+```bash
+npm run visual
+```
+
+Abra `http://127.0.0.1:4173/frontend/`. O servidor atende somente a home e o catálogo necessário para sua visualização; ele não grava `backend/streamings.json` e não fica acessível pela rede local. O modo visual preserva a mesma interface, mas não abre providers, não reproduz DRM, não controla Wi-Fi/Bluetooth/volume/energia e não mede o appliance. Alterações de catálogo feitas nessa página existem somente até recarregar.
+
 ### Desenvolvimento local no macOS
 
 Pré-requisitos: Node.js/npm e os demais requisitos já descritos na documentação do projeto. No macOS, instale as dependências usando o `package-lock.json`; o `postinstall` materializa automaticamente o binário Castlabs compatível usando o checksum do pacote. Valide o ambiente com:
@@ -17,7 +39,6 @@ npm install
 npm ls --depth=0
 npm test
 npm run check
-npm run dev
 npm run dev:mac
 ```
 
@@ -35,15 +56,15 @@ npm run dev:mac
 
 O diretório `.runtime-logs/` é criado quando o logging está habilitado. O nível, ativação, tamanho máximo, saída de console e demais opções continuam sendo lidos de `config/logging.json`; somente o caminho do arquivo é substituído no perfil macOS. O perfil padrão/Linux mantém o caminho configurado, normalmente `/var/log/fifotv/main.log`.
 
-No macOS, o perfil também evita a inicialização de BlueZ/D-Bus; o polling Bluetooth retorna estado neutro. Os controles continuam visíveis e as integrações Linux restantes devem ser validadas no hardware principal.
+No macOS, o perfil também evita a inicialização de BlueZ/D-Bus; o polling Bluetooth retorna estado neutro. Desligar ou reiniciar a máquina retorna indisponibilidade, enquanto reiniciar o próprio FIFOtv permanece possível. Os controles continuam visíveis e as integrações Linux restantes devem ser validadas no hardware principal.
 
-Mesmo runtime com o argumento `--kiosk` encaminhado:
+Execução manual no Debian/all-in-one, com o argumento `--kiosk` encaminhado:
 
 ```bash
-npm start
+npm run appliance
 ```
 
-O main não implementa atualmente um segundo modo de janela para esse argumento.
+`npm start` permanece como alias de compatibilidade desse comando. O main não implementa atualmente um segundo modo de janela para esse argumento.
 
 Testes puros:
 

@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "electron .",
     "dev:mac": "bash scripts/dev-macos.sh",
+    "visual": "node scripts/visual-server.js",
+    "appliance": "electron . --kiosk",
     "start": "electron . --kiosk",
     "postinstall": "node scripts/bootstrap-electron.js",
     "test": "node --test test/*.test.js",

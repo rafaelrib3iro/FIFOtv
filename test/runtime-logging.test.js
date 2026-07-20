@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createNetworkErrorRegistry, redactUrl } = require('../electron/runtime-logging');
-const { resolveLogFile, resolveRuntimeProfile, supportsBluez } = require('../electron/runtime-profile');
+const { resolveLogFile, resolveRuntimeProfile, supportsBluez, supportsPowerActions } = require('../electron/runtime-profile');
 
 test('resolves the explicit macOS runtime profile and keeps Linux as fallback', () => {
   assert.equal(resolveRuntimeProfile('macos'), 'macos');
@@ -22,6 +22,11 @@ test('allows BlueZ only on Linux', () => {
   assert.equal(supportsBluez('linux'), true);
   assert.equal(supportsBluez('darwin'), false);
   assert.equal(supportsBluez('win32'), false);
+});
+
+test('allows machine power actions only in the Linux runtime profile', () => {
+  assert.equal(supportsPowerActions('linux'), true);
+  assert.equal(supportsPowerActions('macos'), false);
 });
 
 test('redacts credentials, query and fragment from logged URLs', () => {

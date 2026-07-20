@@ -17,7 +17,7 @@ Testes de hardware, Castlabs, conta, DRM ou serviço externo nunca podem ser apr
 |---|---|
 | Data | |
 | Branch/commit | |
-| Modo de início | `npm run dev`, `npm start` ou systemd instalado |
+| Modo de início | `npm run dev`, `npm run dev:mac`, `npm run appliance`, `npm start` ou systemd instalado |
 | Hardware | |
 | Controle/air mouse | |
 | Rede | |
@@ -29,6 +29,10 @@ Antes de iniciar:
 ```bash
 npm run check
 ```
+
+## Revisão visual local
+
+Use `npm run visual` e abra `http://127.0.0.1:4173/frontend/` para revisar layout, cards, foco, teclado, popups e estado visual antes de enviar uma mudança ao all-in-one. Esse modo não aprova comportamento de Electron, providers, DRM, D-pad físico, composição de views ou integrações Debian.
 
 # Testes Essenciais
 

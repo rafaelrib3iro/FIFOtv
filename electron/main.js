@@ -13,7 +13,7 @@ const { hostnameFromUrl, matchesHostname, resolveCustomScript } = require('./pro
 const { redactStreamingUrl, runInjectionStages } = require('./streaming-injection');
 const { createClientHintsRegistry } = require('./client-hints');
 const { createNetworkErrorRegistry, redactUrl } = require('./runtime-logging');
-const { resolveLogFile, resolveRuntimeProfile, supportsBluez } = require('./runtime-profile');
+const { resolveLogFile, resolveRuntimeProfile, supportsBluez, supportsPowerActions } = require('./runtime-profile');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -223,11 +223,17 @@ handleFrom('streamings:reorder', () => [homeView], (_, data) => {
 
 // ─── SYSTEM ────────────────────────────────────────────────
 handleFrom('system:shutdown', () => [homeView, overlayView], () => {
+  if (!supportsPowerActions(runtimeProfile)) {
+    return { ok: false, error: 'Desligar a máquina não está disponível no perfil de desenvolvimento macOS' };
+  }
   exec('shutdown -h now');
   return { ok: true };
 });
 
 handleFrom('system:reboot', () => [homeView], () => {
+  if (!supportsPowerActions(runtimeProfile)) {
+    return { ok: false, error: 'Reiniciar a máquina não está disponível no perfil de desenvolvimento macOS' };
+  }
   exec('shutdown -r now');
   return { ok: true };
 });

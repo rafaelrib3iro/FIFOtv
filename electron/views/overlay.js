@@ -109,7 +109,12 @@
   }
 
   async function apiShutdown() {
-    try { await window.fifotv.shutdown(); } catch (_) {}
+    try {
+      const data = await window.fifotv.shutdown();
+      if (!data?.ok) showToast(data?.error || 'Ação do sistema indisponível');
+    } catch (_) {
+      showToast('Não foi possível executar a ação do sistema');
+    }
   }
 
   async function apiRestart() {

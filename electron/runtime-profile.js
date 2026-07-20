@@ -18,4 +18,8 @@ function supportsBluez(platform) {
   return platform === 'linux';
 }
 
-module.exports = { resolveLogFile, resolveRuntimeProfile, supportsBluez };
+function supportsPowerActions(profile) {
+  return profile === DEFAULT_PROFILE;
+}
+
+module.exports = { resolveLogFile, resolveRuntimeProfile, supportsBluez, supportsPowerActions };

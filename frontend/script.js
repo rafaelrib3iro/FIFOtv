@@ -409,7 +409,7 @@ function handleKeydown(e) {
         'F1':  () => { showSettingsPopup(); },
         'F5':  () => { showMonitorPopup(); },
         'F8':  () => { history.back(); },
-        'F9':  () => { window.fifotv.shutdown(); },
+        'F9':  () => { requestPowerAction('shutdown'); },
         'F12': () => { window.fifotv.restartApp(); },
     };
 
@@ -813,7 +813,11 @@ function activateCard(pos) {
 
 function showTransition(streaming) {
     if (typeof window.fifotv !== 'undefined' && window.fifotv.openStreaming) {
-        window.fifotv.openStreaming(streaming.url, streaming.name, streaming.slug);
+        Promise.resolve(window.fifotv.openStreaming(streaming.url, streaming.name, streaming.slug))
+            .then((data) => {
+                if (!data?.ok) showToast(data?.error || 'Não foi possível abrir o streaming');
+            })
+            .catch(() => showToast('Não foi possível abrir o streaming'));
     } else {
         window.location.href = streaming.url;
     }
@@ -937,8 +941,8 @@ function showSettingsPopup() {
             </div>
             <div class="settings-section ${settingsSection === 'system' ? 'active' : ''}" id="section-system">
                 <div class="settings-section-title">Sistema</div>
-                <button class="system-btn" onclick="window.fifotv.shutdown()">${ICON.power} Desligar máquina</button>
-                <button class="system-btn" onclick="window.fifotv.reboot()">${ICON.refresh} Reiniciar máquina</button>
+                <button class="system-btn" onclick="requestPowerAction('shutdown')">${ICON.power} Desligar máquina</button>
+                <button class="system-btn" onclick="requestPowerAction('reboot')">${ICON.refresh} Reiniciar máquina</button>
                 <button class="system-btn" onclick="window.fifotv.restartApp()">${ICON.globe} Reiniciar FIFOtv</button>
             </div>
         </div>
@@ -1453,7 +1457,7 @@ function showContextMenu(e) {
             <div class="context-menu-item" onclick="showMonitorPopup();hideContextMenu();">
                 ${ICON.monitor} Monitor
             </div>
-            <div class="context-menu-item" onclick="window.fifotv.shutdown()">
+            <div class="context-menu-item" onclick="requestPowerAction('shutdown')">
                 ${ICON.power} Desligar
             </div>
         `;
@@ -1485,7 +1489,7 @@ function showContextMenu(e) {
             <div class="context-menu-item" onclick="showSettingsPopup();hideContextMenu();">
                 ${ICON.settings} Configurações
             </div>
-            <div class="context-menu-item" onclick="window.fifotv.shutdown()">
+            <div class="context-menu-item" onclick="requestPowerAction('shutdown')">
                 ${ICON.power} Desligar
             </div>
         `;
@@ -1536,6 +1540,19 @@ async function changeVolume(action) {
     showVolumeToast();
 }
 
+async function requestPowerAction(action) {
+    try {
+        let data;
+        if (action === 'shutdown') data = await window.fifotv.shutdown();
+        else if (action === 'reboot') data = await window.fifotv.reboot();
+        else return;
+        if (!data?.ok) showToast(data?.error || 'Ação do sistema indisponível');
+    } catch (error) {
+        console.error('[FIFOtv] power action error:', error);
+        showToast('Não foi possível executar a ação do sistema');
+    }
+}
+
 function changeZoom(delta) {
     currentZoom = Math.max(50, Math.min(150, currentZoom + delta));
     document.body.style.zoom = currentZoom / 100;
@@ -1579,6 +1596,18 @@ function hideMonitorPopup() {
 async function fetchMonitorStats() {
     try {
         const data = await window.fifotv.getStats();
+        if (data?.unavailable) {
+            const unavailable = 'Indisponível no modo visual';
+            ['monitor-cpu-val', 'monitor-ram-val', 'monitor-disk-val', 'monitor-proc-val'].forEach((id) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = unavailable;
+            });
+            ['monitor-cpu-fill', 'monitor-ram-fill', 'monitor-disk-fill'].forEach((id) => {
+                const element = document.getElementById(id);
+                if (element) element.style.width = '0%';
+            });
+            return;
+        }
         const cpuFill = document.getElementById('monitor-cpu-fill');
         const cpuVal = document.getElementById('monitor-cpu-val');
         const ramFill = document.getElementById('monitor-ram-fill');
@@ -1722,7 +1751,7 @@ if (typeof window.fifotv !== 'undefined' && window.fifotv.onGlobalKey) {
     window.fifotv.onGlobalKey((key) => {
         if (key === 'F1') showSettingsPopup();
         else if (key === 'F5') showMonitorPopup();
-        else if (key === 'F9') window.fifotv.shutdown();
+        else if (key === 'F9') requestPowerAction('shutdown');
         else if (key === 'F12') {
             if (document.fullscreenElement) document.exitFullscreen();
             else document.documentElement.requestFullscreen().catch(() => {});

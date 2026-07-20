@@ -85,11 +85,13 @@ npm install
 npm run dev
 ```
 
-O script `start` inicia o mesmo runtime e encaminha o argumento operacional `--kiosk`:
+Para executar manualmente no Debian/all-in-one, use o comando explícito de appliance. Ele encaminha o argumento operacional `--kiosk` ao mesmo runtime:
 
 ```bash
-npm start
+npm run appliance
 ```
+
+`npm start` permanece como alias de compatibilidade. O argumento não cria hoje um segundo modo de janela.
 
 O resultado pode variar de acordo com a distribuição, o hardware, os drivers e as dependências disponíveis no sistema.
 
@@ -99,8 +101,11 @@ Os comandos principais são:
 
 | Comando | Descrição |
 | --- | --- |
-| `npm run dev` | Inicia o Electron diretamente |
-| `npm start` | Inicia o mesmo runtime e encaminha `--kiosk` |
+| `npm run dev` | Inicia o Electron diretamente no Linux |
+| `npm run dev:mac` | Inicia o Electron com o perfil de desenvolvimento macOS |
+| `npm run visual` | Abre a interface em uma URL local para revisão visual |
+| `npm run appliance` | Inicia manualmente o runtime Debian/all-in-one e encaminha `--kiosk` |
+| `npm start` | Alias de compatibilidade de `npm run appliance` |
 
 A documentação técnica, a arquitetura e os procedimentos de validação estão organizados em [`docs/README.md`](docs/README.md).
 

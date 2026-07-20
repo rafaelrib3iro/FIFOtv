@@ -8,14 +8,18 @@ O systemd instalado é somente uma fronteira ambiental observada: ele pode inici
 
 ## Bootstrap
 
-`package.json` define `electron/main.js` como entrada. Há dois scripts diretos:
+`package.json` define `electron/main.js` como entrada. Os comandos de execução são:
 
-- `npm run dev`: executa `electron .`.
-- `npm start`: executa o mesmo runtime e encaminha `--kiosk`.
+- `npm run dev`: desenvolvimento direto no Linux, com `electron .`.
+- `npm run dev:mac`: desenvolvimento no macOS; executa o mesmo Electron com o perfil macOS explícito.
+- `npm run appliance`: execução manual no Debian/all-in-one; encaminha `--kiosk`.
+- `npm start`: alias de compatibilidade de `npm run appliance`.
 
-O main não consome atualmente esse argumento para criar um segundo modo de janela. Nos dois casos, a janela é criada sem frame e dimensionada para o display.
+O main não consome atualmente esse argumento para criar um segundo modo de janela. `dev`, `appliance` e `start` usam o mesmo runtime Linux, cuja janela é criada sem frame e dimensionada para o display. Homologação no all-in-one e uso como appliance são contextos operacionais desse mesmo runtime: a primeira exige o checklist manual e a segunda normalmente é iniciada pela unidade systemd externa.
 
 No aparelho inspecionado, uma unidade externa em `/etc/systemd/system/fifotv.service` aponta para o Electron Castlabs instalado em `node_modules`, usa este checkout como diretório de trabalho e adiciona `--kiosk`. A configuração operacional completa desse serviço fica fora do escopo da fundação.
+
+`npm run visual` inicia um servidor HTTP somente em `127.0.0.1:4173` e disponibiliza a home em `/frontend/`. Esse modo injeta uma bridge de navegador somente quando o preload Electron não definiu `window.fifotv`: ele lê o catálogo ativo de forma somente leitura, mantém alterações de catálogo apenas em memória e substitui capacidades locais por respostas explícitas de indisponibilidade. É uma ferramenta de desenvolvimento e inspeção da home, não outro runtime do produto nem uma substituição da homologação Debian.
 
 Antes de `app.whenReady()`, o main configura switches do Chromium. Ao ficar pronto, espera `components.whenReady()` quando disponível para inicializar os componentes Castlabs/Widevine, cria a janela principal e registra permissões restritas ao `mediaKeySystem`.
 
@@ -186,7 +190,7 @@ Client Hints são adicionados somente às requisições do `webContentsId` regis
 
 Essas integrações dependem do Debian e do hardware. Inspeção estática não substitui teste de Wi-Fi, Bluetooth, áudio, DPMS, controle físico ou DRM.
 
-O desenvolvimento local no macOS usa `FIFOtv_RUNTIME_PROFILE=macos`: o perfil grava em `.runtime-logs/main.log` e não inicializa BlueZ/D-Bus; `btStatus()` mantém estado neutro sem tentar abrir o socket Linux. O runtime padrão continua destinado ao Linux; os controles permanecem visíveis e workarounds de Wi-Fi, volume e DPMS ainda dependem do ambiente principal.
+O desenvolvimento local no macOS usa `FIFOtv_RUNTIME_PROFILE=macos`: o perfil grava em `.runtime-logs/main.log`, não inicializa BlueZ/D-Bus e recusa desligar ou reiniciar a máquina; `btStatus()` mantém estado neutro sem tentar abrir o socket Linux. A reinicialização do próprio FIFOtv permanece disponível. O runtime padrão continua destinado ao Linux; os controles permanecem visíveis e workarounds de Wi-Fi, volume e DPMS ainda dependem do ambiente principal.
 
 ## Logging
 
