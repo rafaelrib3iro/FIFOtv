@@ -8,11 +8,34 @@ Antes de alterar um componente, prove que ele participa do grafo atual por `requ
 
 ## Iniciar e Inspecionar
 
+### Desenvolvimento local no macOS
+
+Pré-requisitos: Node.js/npm e os demais requisitos já descritos na documentação do projeto. No macOS, instale as dependências usando o `package-lock.json`; o `postinstall` materializa automaticamente o binário Castlabs compatível usando o checksum do pacote. Valide o ambiente com:
+
+```bash
+npm install
+npm ls --depth=0
+npm test
+npm run check
+npm run dev
+npm run dev:mac
+```
+
 Início direto do Electron:
 
 ```bash
 npm run dev
 ```
+
+No macOS, use o perfil explícito que mantém o runtime principal e grava o log em `.runtime-logs/main.log`:
+
+```bash
+npm run dev:mac
+```
+
+O diretório `.runtime-logs/` é criado quando o logging está habilitado. O nível, ativação, tamanho máximo, saída de console e demais opções continuam sendo lidos de `config/logging.json`; somente o caminho do arquivo é substituído no perfil macOS. O perfil padrão/Linux mantém o caminho configurado, normalmente `/var/log/fifotv/main.log`.
+
+No macOS, o perfil também evita a inicialização de BlueZ/D-Bus; o polling Bluetooth retorna estado neutro. Os controles continuam visíveis e as integrações Linux restantes devem ser validadas no hardware principal.
 
 Mesmo runtime com o argumento `--kiosk` encaminhado:
 
@@ -53,6 +76,12 @@ Logging local, quando habilitado:
 ```bash
 tail -f /var/log/fifotv/main.log
 journalctl -u fifotv -f
+```
+
+No macOS:
+
+```bash
+tail -f .runtime-logs/main.log
 ```
 
 `/var/log/fifotv/main.log` é a fonte mais completa quando `config/logging.json` está habilitado. `journalctl` depende da unidade externa instalada em `/etc/systemd/system/fifotv.service`.

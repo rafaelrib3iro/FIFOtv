@@ -13,6 +13,7 @@ const { hostnameFromUrl, matchesHostname, resolveCustomScript } = require('./pro
 const { redactStreamingUrl, runInjectionStages } = require('./streaming-injection');
 const { createClientHintsRegistry } = require('./client-hints');
 const { createNetworkErrorRegistry, redactUrl } = require('./runtime-logging');
+const { resolveLogFile, resolveRuntimeProfile, supportsBluez } = require('./runtime-profile');
 
 // Logging configuration
 const LOG_CONFIG_PATH = path.join(__dirname, '..', 'config', 'logging.json');
@@ -23,10 +24,23 @@ function loadLogConfig() {
     return { enabled: true, level: 'info', file: '/var/log/fifotv/main.log', maxSize: 5242880, consoleOutput: false };
   }
 }
-const logConfig = loadLogConfig();
+const runtimeProfile = resolveRuntimeProfile(process.env.FIFOtv_RUNTIME_PROFILE);
+const configuredLogConfig = loadLogConfig();
+const logConfig = {
+  ...configuredLogConfig,
+  file: resolveLogFile(configuredLogConfig.file, runtimeProfile, path.join(__dirname, '..')),
+};
+
+function saveLogConfig() {
+  fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify({
+    ...logConfig,
+    file: configuredLogConfig.file,
+  }, null, 2));
+}
 
 let log = null;
 if (logConfig.enabled) {
+  if (runtimeProfile === 'macos') fs.mkdirSync(path.dirname(logConfig.file), { recursive: true });
   log = require('electron-log/main');
   log.initialize({ preload: true });
   log.transports.file.resolvePathFn = () => logConfig.file;
@@ -373,7 +387,7 @@ handleFrom('logging:get-status', () => [homeView], () => ({
 handleFrom('logging:set-enabled', () => [homeView], (_, enabled) => {
   assertPayload(typeof enabled === 'boolean', 'logging enabled');
   logConfig.enabled = enabled;
-  fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
+  saveLogConfig();
   return { ok: true, message: `Logging ${enabled ? 'enabled' : 'disabled'}. Restart app to apply.` };
 });
 
@@ -381,7 +395,7 @@ handleFrom('logging:set-level', () => [homeView], (_, level) => {
   const validLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
   assertPayload(validLevels.includes(level), 'logging level');
   logConfig.level = level;
-  fs.writeFileSync(LOG_CONFIG_PATH, JSON.stringify(logConfig, null, 2));
+  saveLogConfig();
   return { ok: true, message: `Log level set to ${level}. Restart app to apply.` };
 });
 
@@ -544,6 +558,7 @@ async function findDevicePath(bus, mac) {
 }
 
 async function getBtAdapter() {
+  if (!supportsBluez(process.platform)) return null;
   if (btAdapter) return btAdapter;
   try {
     const systemBus = dbusNext.systemBus();

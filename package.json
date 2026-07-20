@@ -6,9 +6,11 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "electron .",
+    "dev:mac": "bash scripts/dev-macos.sh",
     "start": "electron . --kiosk",
-    "test": "node --test test",
-    "check": "node --check electron/*.js && node --check electron/views/*.js && node --check electron/views/spatial-navigation/*.js && node --check electron/views/streaming-customizations/*.js && node --check frontend/*.js && node --test test",
+    "postinstall": "node scripts/bootstrap-electron.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check electron/*.js && node --check electron/views/*.js && node --check electron/views/spatial-navigation/*.js && node --check electron/views/streaming-customizations/*.js && node --check frontend/*.js && node --test test/*.test.js",
     "build": "electron-builder --linux deb",
     "dist": "electron-builder --linux AppImage"
   },
@@ -17,7 +19,9 @@
     "electron-log": "^5.4.4"
   },
   "devDependencies": {
-    "electron": "https://github.com/castlabs/electron-releases#v42.3.3+wvcus",
+    "@electron/get": "^5.0.0",
+    "electron": "https://codeload.github.com/castlabs/electron-releases/tar.gz/refs/tags/v42.3.3+wvcus",
+    "extract-zip": "^2.0.1",
     "electron-builder": "^26.0.0"
   },
   "build": {

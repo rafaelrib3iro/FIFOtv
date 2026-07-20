@@ -24,6 +24,12 @@ A ordem de autoridade é:
 
 Se um documento divergir do código ou dos testes, o documento deve ser corrigido. Planos, revisões e relatos antigos nunca tornam um componente ativo por si só.
 
+## Workspace de acompanhamento
+
+O projeto possui um [workspace de acompanhamento no Notion](https://app.notion.com/p/3a3e81b62c8b819aa3fae0e38b63baaf) para ideias, decisões de produto, prioridades, resumos e validações manuais. Ele pode ser consultado e atualizado via Notion MCP quando necessário.
+
+O GitHub continua sendo a fonte de verdade para código, testes, arquitetura vigente e contratos técnicos. O Notion não substitui essa documentação nem comprova comportamento implementado. Não registre no workspace senhas, tokens, cookies, MACs reais ou outros dados sensíveis.
+
 ## Pesquisa
 
 `research/` contém propostas que podem orientar trabalho futuro, mas que não representam funcionalidades implementadas ou aprovadas.

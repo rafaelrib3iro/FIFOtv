@@ -186,9 +186,13 @@ Client Hints são adicionados somente às requisições do `webContentsId` regis
 
 Essas integrações dependem do Debian e do hardware. Inspeção estática não substitui teste de Wi-Fi, Bluetooth, áudio, DPMS, controle físico ou DRM.
 
+O desenvolvimento local no macOS usa `FIFOtv_RUNTIME_PROFILE=macos`: o perfil grava em `.runtime-logs/main.log` e não inicializa BlueZ/D-Bus; `btStatus()` mantém estado neutro sem tentar abrir o socket Linux. O runtime padrão continua destinado ao Linux; os controles permanecem visíveis e workarounds de Wi-Fi, volume e DPMS ainda dependem do ambiente principal.
+
 ## Logging
 
 `config/logging.json` define ativação, nível, arquivo, tamanho e saída de console. Quando habilitado, `electron-log` recebe logs do main e eventos explícitos dos renderers.
+
+No perfil macOS, somente o destino do arquivo é substituído por `.runtime-logs/main.log`; as demais opções permanecem as de `config/logging.json`. O perfil padrão preserva o caminho configurado para Linux.
 
 `attachRendererLogging()` registra console, falha de load, renderer encerrado, preload, responsividade e cleanup. `electron/runtime-logging.js` mantém um único listener `onErrorOccurred` por sessão e atribui falhas usando `webContentsId`.
 
