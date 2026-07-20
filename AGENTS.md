@@ -79,14 +79,19 @@ Os handlers `remote:*`, `logging:*` e `system:update` não possuem bridge atual.
 ## Comandos
 
 ```bash
-npm run dev       # inicia Electron diretamente
-npm start         # inicia o mesmo runtime e encaminha --kiosk
-npm test          # testes node:test
-npm run check     # syntax checks e testes
-git diff --check  # whitespace do diff
+npm run dev        # desenvolvimento Electron no Linux
+npm run dev:mac    # desenvolvimento Electron com perfil macOS
+npm run visual     # home em http://127.0.0.1:4173/frontend/
+npm run appliance  # início manual no Debian/all-in-one, encaminha --kiosk
+npm start          # alias de compatibilidade de npm run appliance
+npm test           # testes node:test
+npm run check      # syntax checks e testes
+git diff --check   # whitespace do diff
 ```
 
-O argumento `--kiosk` não produz atualmente um segundo modo de janela no main. Não descreva `npm run dev` como janela comum nem `npm start` como fullscreen garantido.
+O argumento `--kiosk` não produz atualmente um segundo modo de janela no main. Não descreva `npm run dev` como janela comum nem `npm run appliance`/`npm start` como fullscreen garantido. Homologação no all-in-one e appliance compartilham o runtime Linux; o que muda é o procedimento e a validação física.
+
+`npm run visual` é somente uma ferramenta local de inspeção da home. Ele não abre providers, não valida DRM, D-pad físico, composição de `WebContentsView` ou integrações Debian e não grava o catálogo persistido.
 
 Diagnóstico físico de teclas:
 
