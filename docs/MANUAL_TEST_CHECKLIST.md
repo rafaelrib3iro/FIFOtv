@@ -84,9 +84,9 @@ Status: `[ ]`
 
 **Preparação:** Settings acessível; definir app de teste com nome literal `TV "Sala" <teste>` e URL HTTP/HTTPS segura. O slug será derivado pela aplicação.
 
-**Ações:** adicionar; verificar card/lista; mover para cima e para baixo; remover pelo X; confirmar o foco após cada operação.
+**Ações:** adicionar um app web; verificar card/lista; mover para cima e para baixo; remover pelo X; confirmar o foco após cada operação.
 
-**Esperado:** nome renderiza literalmente; catálogo permanece completo e válido; ordem persiste; foco vai para ação equivalente/adjacente ou botão adicionar.
+**Esperado:** nome renderiza literalmente; o app recebe o tipo `web`; catálogo permanece completo e válido; ordem persiste; foco vai para ação equivalente/adjacente ou botão adicionar.
 
 **Regressões a observar:** HTML executado, item errado movido/removido, grade vazia, foco vazando para a home.
 

@@ -1,21 +1,21 @@
 (function installVisualBridge() {
     if (window.fifotv) return;
 
-    let streamings = null;
+    let apps = null;
     let volume = 50;
     let muted = false;
 
     const copy = (items) => items.map((item) => ({ ...item }));
     const unavailable = (feature) => ({ ok: false, error: `${feature} não está disponível no modo visual` });
 
-    async function getVisualStreamings() {
-        if (streamings) return streamings;
-        const response = await fetch('/backend/streamings.json', { cache: 'no-store' });
+    async function getVisualApps() {
+        if (apps) return apps;
+        const response = await fetch('/backend/apps.json', { cache: 'no-store' });
         if (!response.ok) throw new Error('Não foi possível carregar o catálogo visual');
         const catalog = await response.json();
-        if (!Array.isArray(catalog.streamings)) throw new TypeError('Catálogo visual inválido');
-        streamings = copy(catalog.streamings);
-        return streamings;
+        if (!Array.isArray(catalog.apps)) throw new TypeError('Catálogo visual inválido');
+        apps = copy(catalog.apps);
+        return apps;
     }
 
     function volumeState() {
@@ -23,20 +23,20 @@
     }
 
     window.fifotv = {
-        getStreamings: async () => ({ streamings: copy(await getVisualStreamings()) }),
-        addStreaming: async (streaming) => {
-            const items = await getVisualStreamings();
-            if (items.some((item) => item.id === streaming.id)) return { ok: false, error: 'ID de streaming duplicado' };
-            items.push({ ...streaming });
+        getApps: async () => ({ apps: copy(await getVisualApps()) }),
+        addApp: async (app) => {
+            const items = await getVisualApps();
+            if (items.some((item) => item.id === app.id)) return { ok: false, error: 'ID de app duplicado' };
+            items.push({ ...app });
             return { ok: true };
         },
-        removeStreaming: async (id) => {
-            streamings = (await getVisualStreamings()).filter((item) => item.id !== id);
+        removeApp: async (id) => {
+            apps = (await getVisualApps()).filter((item) => item.id !== id);
             return { ok: true };
         },
-        reorderStreamings: async (catalog) => {
-            if (!Array.isArray(catalog?.streamings)) return { ok: false, error: 'Catálogo visual inválido' };
-            streamings = copy(catalog.streamings);
+        reorderApps: async (catalog) => {
+            if (!Array.isArray(catalog?.apps)) return { ok: false, error: 'Catálogo visual inválido' };
+            apps = copy(catalog.apps);
             return { ok: true };
         },
         shutdown: async () => unavailable('Desligar a máquina'),
@@ -67,7 +67,7 @@
         btConnect: async () => unavailable('Conectar ao Bluetooth'),
         btDisconnect: async () => unavailable('Desconectar o Bluetooth'),
         btUnpair: async () => unavailable('Esquecer dispositivo Bluetooth'),
-        openStreaming: async () => unavailable('Abrir streaming'),
+        openApp: async () => unavailable('Abrir app'),
         goHome: async () => ({ ok: true }),
         screenOff: async () => unavailable('Apagar a tela'),
         onGlobalKey: () => {},

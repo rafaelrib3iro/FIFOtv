@@ -32,8 +32,8 @@ Antes de `app.whenReady()`, o main configura switches do Chromium. Ao ficar pron
 - Registro de IPC e validação de origem/payload.
 - Catálogo persistido no checkout.
 - Wi-Fi, Bluetooth, volume, métricas, DPMS e ações de sistema.
-- Navegação de streaming e lifecycle do overlay.
-- Identidade do streaming e pipeline de injeção.
+- Navegação do app ativo e lifecycle do overlay.
+- Registro de runtimes e lifecycle da sessão do app ativo.
 - Logging de main, renderers, rede e falhas de processo.
 - Atalhos globais e encaminhamento de teclas.
 
@@ -42,7 +42,9 @@ Módulos pequenos isolam contratos puros sem criar uma camada de serviços artif
 | Módulo | Responsabilidade |
 |---|---|
 | `electron/ipc-validation.js` | Validação de payloads privilegiados |
-| `electron/catalog.js` | Parse e validação defensiva do catálogo |
+| `electron/app-catalog.js` | Parse, validação e migração única do catálogo de apps |
+| `electron/app-runtimes.js` | Registro e resolução do runtime por tipo de app |
+| `electron/web-runtime.js` | Sessão do runtime `web`: view externa, identidade, injeção, foco, comandos e encerramento |
 | `electron/system-controls.js` | Parser do `nmcli` e clamp |
 | `electron/view-lifecycle.js` | Validade da view e geração corrente |
 | `electron/provider-resolution.js` | Matching de hostname e seleção de script |
@@ -62,11 +64,13 @@ A aplicação usa uma `BrowserWindow` sem frame como contentor. O `webContents` 
 
 `homeView` carrega `frontend/index.html` com `electron/preload.js`, `contextIsolation: true` e `nodeIntegration: false`. A home permanece montada durante o streaming, preservando DOM, estado de navegação e `localStorage`.
 
-### Streaming
+### App ativo
 
-`streamingView` é criada ao abrir um item do catálogo. Ela carrega URL HTTP/HTTPS externa, usa `electron/preload-streaming.js`, mantém `nodeIntegration: false` e usa `contextIsolation: false` para a identidade JavaScript exigida pelo contexto atual de providers.
+O `main.js` abre o app pedindo uma sessão ao registro de runtimes e conserva apenas a referência à sua view para compô-la com home, loading e overlay. Ele é o anfitrião da TV: cria a janela, administra as views locais, foco, energia, IPC e a volta para a home. O runtime decide como abrir, redimensionar, focar, recarregar, receber comandos e encerrar o seu app.
 
-A view recebe uma geração monotônica. Callbacks de `dom-ready`, timers, injeção e recuperação verificam se operam sobre a mesma view viva e geração corrente. Falha de load do frame principal ou encerramento do renderer retorna para a home uma única vez.
+No ciclo atual, somente o runtime `web` existe. Sua sessão, em `electron/web-runtime.js`, carrega URL HTTP/HTTPS externa, usa `electron/preload-streaming.js`, mantém `nodeIntegration: false` e usa `contextIsolation: false` para a identidade JavaScript exigida pelos providers atuais.
+
+A view recebe uma geração monotônica. Callbacks de `dom-ready`, timers, injeção e recuperação verificam se operam sobre a mesma view viva e geração corrente. Falha de load do frame principal ou encerramento do renderer retorna para a home uma única vez. Voltar à home fecha o app; pausa, retomada e múltiplos apps em memória não existem.
 
 ### Loading
 
@@ -123,11 +127,13 @@ Distribuição de capacidades:
 
 O teste `test/ipc-contracts.test.js` verifica que cada canal exposto pelos preloads possui handler/listener ou emissor e que cada método exposto possui consumidor no renderer correspondente.
 
-## Catálogo e Persistência Atual
+## Catálogo de Apps e Persistência Atual
 
-O catálogo ativo é `backend/streamings.json`. O main lê, valida e escreve `{ streamings: [...] }`; JSON inválido, formato inválido, IDs duplicados ou arquivo ausente geram erro explícito. A home não cria um catálogo alternativo silencioso.
+O catálogo ativo é `backend/apps.json`. O main lê, valida e escreve `{ apps: [...] }`; cada app atual possui `id`, `name`, `slug`, `type: "web"` e `url`. JSON inválido, formato inválido, IDs duplicados ou arquivo ausente geram erro explícito. A home não cria um catálogo alternativo silencioso.
 
-Cada entrada possui ID inteiro seguro, nome não vazio, slug validado e URL HTTP/HTTPS com ou sem protocolo inicial. Cards armazenam `data-streaming-id`; posição visual não é usada como identidade. Reordenação e remoção restauram foco para uma ação válida.
+Na primeira abertura de um checkout que ainda só possui `backend/streamings.json`, o catálogo legado é convertido uma vez para apps web e gravado em `backend/apps.json`. O arquivo legado é somente uma fonte de migração, não um segundo catálogo ativo.
+
+Cada entrada possui ID inteiro seguro, nome não vazio, slug validado, tipo permitido e URL HTTP/HTTPS com ou sem protocolo inicial. Cards armazenam `data-app-id`; posição visual não é usada como identidade. Reordenação e remoção restauram foco para uma ação válida.
 
 “Mais Usados” é estado local da home em `localStorage`. Ele altera a ordem visual, mas a ativação resolve o item pelo ID estável.
 
@@ -149,7 +155,9 @@ No streaming:
 - A saída centralizada limpa views, timers, Client Hints, power blocker e listener `app-command`.
 - A home recebe foco novamente e reinicia seus timers de screensaver.
 
-## Providers e Pipeline de Injeção
+## Runtime Web: Providers e Pipeline de Injeção
+
+`electron/app-runtimes.js` registra o runtime `web`; `electron/web-runtime.js` contém sua implementação. O contrato de uma sessão é pequeno: ela fornece sua `view` e as operações `focus`, `reload`, `setBounds`, `zoom`, `handleAppCommand`, `handleInput` e `dispose`. O `main.js` continua dono das views locais, overlay, energia, IPC, z-order e recuperação para a home. Um runtime futuro não herda identidade, injeções ou regras de navegação do web automaticamente.
 
 A URL do catálogo é normalizada antes da seleção. YouTube é reconhecido por hostname exato/subdomínio válido e direcionado a `https://www.youtube.com/tv`. Prime Video também é detectado por limite real de hostname, sem substring de query ou domínio semelhante.
 
@@ -222,6 +230,8 @@ Os handlers `remote:*` permanecem sem bridge. Isso não transforma OpenCode em f
 - Tornar callbacks e recursos assíncronos dependentes da view/geração corrente.
 - Manter identidade, DRM e customizações específicas condicionados a teste por provider.
 - Tratar OpenCode como ferramenta de desenvolvimento, não produto.
+- Tratar switches do Chromium como configuração global do processo; identidade, polyfill espacial e customizações pertencem ao runtime `web`.
+- Manter webOS como pesquisa futura: ele exigirá preload, segurança e validação próprios, sem reutilizar a bridge ou o pipeline web por padrão.
 
 ## Limitações e Backlog
 

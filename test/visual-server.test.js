@@ -44,7 +44,7 @@ test('serves only the visual home and read-only catalog', async () => {
   try {
     const root = await request(port, '/');
     const home = await request(port, '/frontend/');
-    const catalog = await request(port, '/backend/streamings.json');
+    const catalog = await request(port, '/backend/apps.json');
     const privateFile = await request(port, '/package.json');
     const head = await request(port, '/frontend/style.css', 'HEAD');
 
@@ -53,7 +53,7 @@ test('serves only the visual home and read-only catalog', async () => {
     assert.equal(home.statusCode, 200);
     assert.match(home.body, /visual-bridge\.js/);
     assert.equal(catalog.statusCode, 200);
-    assert.ok(Array.isArray(JSON.parse(catalog.body).streamings));
+    assert.ok(Array.isArray(JSON.parse(catalog.body).apps));
     assert.equal(privateFile.statusCode, 404);
     assert.equal(head.statusCode, 200);
     assert.equal(head.body, '');

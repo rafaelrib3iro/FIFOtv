@@ -44,7 +44,7 @@ function sendFile(request, response, filePath) {
 
 function createVisualServer(projectRoot) {
   const frontendRoot = path.join(projectRoot, 'frontend');
-  const catalogPath = path.join(projectRoot, 'backend', 'streamings.json');
+  const catalogPath = path.join(projectRoot, 'backend', 'apps.json');
 
   return http.createServer((request, response) => {
     if (!['GET', 'HEAD'].includes(request.method)) {
@@ -68,7 +68,7 @@ function createVisualServer(projectRoot) {
       return;
     }
 
-    if (pathname === '/backend/streamings.json') {
+    if (pathname === '/backend/apps.json') {
       sendFile(request, response, catalogPath);
       return;
     }

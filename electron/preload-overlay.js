@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('fifotv', {
 
   // Navegação
   goHome: () => ipcRenderer.invoke('nav:go-home'),
-  reloadStreaming: () => ipcRenderer.invoke('nav:reload-streaming'),
+  reloadApp: () => ipcRenderer.invoke('nav:reload-app'),
 
   // Sistema
   shutdown: () => ipcRenderer.invoke('system:shutdown'),

@@ -1,0 +1,14 @@
+{
+  "apps": [
+    { "id": 1, "name": "Netflix", "slug": "netflix", "type": "web", "url": "https://netflix.com" },
+    { "id": 2, "name": "YouTube", "slug": "youtube", "type": "web", "url": "https://youtube.com/tv" },
+    { "id": 3, "name": "Prime Video", "slug": "primevideo", "type": "web", "url": "https://primevideo.com" },
+    { "id": 4, "name": "Disney+", "slug": "disneyplus", "type": "web", "url": "https://disneyplus.com" },
+    { "id": 7, "name": "Max", "slug": "hbomax", "type": "web", "url": "https://max.com" },
+    { "id": 1781891470474, "name": "Apple TV", "slug": "appletv", "type": "web", "url": "https://tv.apple.com/br" },
+    { "id": 1781893996522, "name": "Apple Music", "slug": "applemusic", "type": "web", "url": "https://music.apple.com/br/" },
+    { "id": 1782743845908, "name": "Google", "slug": "google", "type": "web", "url": "https://www.google.com" },
+    { "id": 1783180383770, "name": "Globoplay", "slug": "globoplay", "type": "web", "url": "www.globoplay.com.br" },
+    { "id": 1752627600000, "name": "Nuvio", "slug": "nuvio", "type": "web", "url": "https://web.nuvioapp.space/" }
+  ]
+}

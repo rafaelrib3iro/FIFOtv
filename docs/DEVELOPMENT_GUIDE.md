@@ -28,7 +28,7 @@ O FIFOtv mantém uma única implementação Electron para o produto. Os contexto
 npm run visual
 ```
 
-Abra `http://127.0.0.1:4173/frontend/`. O servidor atende somente a home e o catálogo necessário para sua visualização; ele não grava `backend/streamings.json` e não fica acessível pela rede local. O modo visual preserva a mesma interface, mas não abre providers, não reproduz DRM, não controla Wi-Fi/Bluetooth/volume/energia e não mede o appliance. Alterações de catálogo feitas nessa página existem somente até recarregar.
+Abra `http://127.0.0.1:4173/frontend/`. O servidor atende somente a home e o catálogo necessário para sua visualização; ele não grava `backend/apps.json` e não fica acessível pela rede local. O modo visual preserva a mesma interface, mas não abre providers, não reproduz DRM, não controla Wi-Fi/Bluetooth/volume/energia e não mede o appliance. Alterações de catálogo feitas nessa página existem somente até recarregar.
 
 ### Desenvolvimento local no macOS
 
@@ -127,10 +127,11 @@ Mapa rápido:
 | Bridge da home | `electron/preload.js` |
 | Overlay, menu, toast, monitor | `electron/views/overlay.*`, `electron/preload-overlay.js` |
 | Views, IPC e integrações locais | `electron/main.js` |
-| Identidade do streaming | `electron/preload-streaming.js` e constantes do main |
+| Registro de runtimes | `electron/app-runtimes.js` |
+| Runtime web: sessão, identidade e entrada | `electron/web-runtime.js`, `electron/preload-streaming.js` |
 | Seleção de provider | `electron/provider-resolution.js` e customizations `config.js` |
 | Injeção | `electron/streaming-injection.js` e scripts em `streaming-customizations/` |
-| Catálogo | `backend/streamings.json`, `electron/catalog.js` |
+| Catálogo de apps | `backend/apps.json`, `electron/app-catalog.js` |
 | Logging de rede | `electron/runtime-logging.js` |
 
 ## Alterar Popup, Modal ou Settings
@@ -240,7 +241,11 @@ Sempre:
 4. Não atualize estado visual antes da confirmação autoritativa.
 5. Não registre senha, token ou query sensível.
 
-## Adicionar ou Alterar Provider
+## Adicionar ou Alterar App Web ou Provider
+
+O único runtime implementado é `web`. Todo app adicionado pela home recebe `type: "web"`; não exponha tipos futuros até que possuam runtime, segurança e validação próprios. A sessão web aplica o preload, identidade, navegação espacial e customizações existentes. Não a reutilize implicitamente para webOS, Linux ou Tizen.
+
+Ao criar outro runtime, registre-o em `electron/app-runtimes.js` e implemente uma sessão própria. Mantenha o contrato limitado a `view`, foco, recarga, redimensionamento, zoom, comandos, entrada e encerramento. O `main.js` não deve receber regras de identidade, lifecycle interno, IPC do app ou atalhos específicos daquele runtime.
 
 Não selecione provider por `url.includes()` ou regex ampla sobre a URL completa.
 
@@ -286,7 +291,7 @@ Ao criar callback, timer, intervalo, listener ou Promise, defina no mesmo bloco:
 - Como é cancelado.
 - Qual foco ou estado deve ser restaurado.
 
-Para streaming, capture a view local e a geração. Não leia apenas a variável global dentro de callbacks tardios.
+Para o app ativo, capture a view local e a geração. Não leia apenas a variável global dentro de callbacks tardios.
 
 Para timers e intervalos:
 

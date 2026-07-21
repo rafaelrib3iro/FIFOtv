@@ -667,8 +667,8 @@ body::after {
     transition: opacity 150ms ease;
 }
 
-/* Streaming list item */
-.streaming-item {
+/* App list item */
+.app-item {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -679,11 +679,11 @@ body::after {
     transition: background var(--transition-fast);
 }
 
-.streaming-item:hover {
+.app-item:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 
-.streaming-item-icon {
+.app-item-icon {
     width: 32px;
     height: 32px;
     display: flex;
@@ -692,24 +692,24 @@ body::after {
     flex-shrink: 0;
 }
 
-.streaming-item-icon img {
+.app-item-icon img {
     width: 100%;
     height: 100%;
     filter: brightness(0) invert(1);
 }
 
-.streaming-item-info {
+.app-item-info {
     flex: 1;
     min-width: 0;
 }
 
-.streaming-item-name {
+.app-item-name {
     font-size: 15px;
     font-weight: 500;
     color: var(--text-primary);
 }
 
-.streaming-item-url {
+.app-item-url {
     font-size: 13px;
     color: var(--text-dim);
     white-space: nowrap;
@@ -717,7 +717,7 @@ body::after {
     text-overflow: ellipsis;
 }
 
-.streaming-item-actions {
+.app-item-actions {
     display: flex;
     gap: 6px;
 }
@@ -806,7 +806,7 @@ body::after {
     background: rgba(255, 255, 255, 0.08);
 }
 
-.streaming-item.fifotv-focused,
+.app-item.fifotv-focused,
 .system-btn.fifotv-focused,
 .btn-primary.fifotv-focused {
     background: rgba(255, 255, 255, 0.12) !important;
@@ -1055,7 +1055,7 @@ input.fifotv-focused {
 
 /* Hover States */
 .system-btn,
-.streaming-item,
+.app-item,
 .btn-icon,
 .context-volume-btn,
 .settings-sidebar-item,
@@ -1064,7 +1064,7 @@ input.fifotv-focused {
 }
 
 .system-btn:hover,
-.streaming-item:hover,
+.app-item:hover,
 .btn-icon:hover,
 .context-volume-btn:hover,
 .settings-sidebar-item:hover,
@@ -1079,8 +1079,8 @@ input.fifotv-focused {
     transition: all 0.15s ease;
 }
 
-.streaming-item:hover .btn-icon,
-.streaming-item:hover .btn-icon.danger {
+.app-item:hover .btn-icon,
+.app-item:hover .btn-icon.danger {
     background: transparent;
 }
 

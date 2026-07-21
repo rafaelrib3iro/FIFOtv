@@ -1,11 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('fifotv', {
-  // Streamings
-  getStreamings: () => ipcRenderer.invoke('streamings:get'),
-  addStreaming: (data) => ipcRenderer.invoke('streamings:add', data),
-  removeStreaming: (id) => ipcRenderer.invoke('streamings:remove', id),
-  reorderStreamings: (list) => ipcRenderer.invoke('streamings:reorder', list),
+  // Apps
+  getApps: () => ipcRenderer.invoke('apps:get'),
+  addApp: (data) => ipcRenderer.invoke('apps:add', data),
+  removeApp: (id) => ipcRenderer.invoke('apps:remove', id),
+  reorderApps: (list) => ipcRenderer.invoke('apps:reorder', list),
 
   // Sistema
   shutdown: () => ipcRenderer.invoke('system:shutdown'),
@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('fifotv', {
   btUnpair: (mac) => ipcRenderer.invoke('bt:unpair', mac),
 
   // Navegação
-  openStreaming: (url, name, slug) => ipcRenderer.invoke('nav:open-streaming', url, name, slug),
+  openApp: (app) => ipcRenderer.invoke('nav:open-app', app),
   goHome: () => ipcRenderer.invoke('nav:go-home'),
 
   // Display

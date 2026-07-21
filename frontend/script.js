@@ -114,7 +114,7 @@ function trackUsage(id) {
 }
 
 function getMostUsed() {
-    return streamings
+    return apps
         .map(s => ({ ...s, count: usageCounts[s.id] || 0 }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 4)
@@ -122,7 +122,7 @@ function getMostUsed() {
 }
 
 let focusedIndex = 0;
-let streamings = [];
+let apps = [];
 let ssTimer = null;
 let dpmsTimer = null;
 let initialRender = true;
@@ -208,13 +208,13 @@ function updateClock() {
     document.getElementById('screensaver-date').textContent = dateStr;
 }
 
-async function loadStreamings() {
+async function loadApps() {
     try {
-        const data = await window.fifotv.getStreamings();
-        streamings = data.streamings;
+        const data = await window.fifotv.getApps();
+        apps = data.apps;
     } catch (e) {
-        streamings = [];
-        showToast('Não foi possível carregar o catálogo de streamings');
+        apps = [];
+        showToast('Não foi possível carregar o catálogo de apps');
     }
     renderGrid();
 }
@@ -224,7 +224,7 @@ function renderGrid() {
     const mainGrid = document.getElementById('grid');
     const recentsSection = document.getElementById('recents-section');
     const focusedCard = document.querySelector(`.card[data-pos="${focusedIndex}"]`);
-    const focusedStreamingId = focusedCard ? Number(focusedCard.dataset.streamingId) : null;
+    const focusedAppId = focusedCard ? Number(focusedCard.dataset.appId) : null;
     recentsGrid.innerHTML = '';
     mainGrid.innerHTML = '';
 
@@ -237,26 +237,26 @@ function renderGrid() {
         const card = document.createElement('div');
         card.className = 'card card-sm';
         card.dataset.pos = i;
-        card.dataset.streamingId = s.id;
+        card.dataset.appId = s.id;
         const icon = document.createElement('div');
         icon.className = 'card-icon';
-        appendStreamingIcon(icon, s);
+        appendAppIcon(icon, s);
         card.appendChild(icon);
         recentsGrid.appendChild(card);
     });
 
-    // Render main grid (streamings + add button)
+    // Render main grid (apps + add button)
     const totalSlots = 12;
 
-    streamings.forEach((s, i) => {
+    apps.forEach((s, i) => {
         const pos = recentsCount + i;
         const card = document.createElement('div');
         card.className = 'card card-sm';
         card.dataset.pos = pos;
-        card.dataset.streamingId = s.id;
+        card.dataset.appId = s.id;
         const icon = document.createElement('div');
         icon.className = 'card-icon';
-        appendStreamingIcon(icon, s);
+        appendAppIcon(icon, s);
         const title = document.createElement('div');
         title.className = 'card-title';
         title.textContent = s.name;
@@ -267,7 +267,7 @@ function renderGrid() {
     // Add button
     const addCard = document.createElement('div');
     addCard.className = 'card card-sm card-add';
-    addCard.dataset.pos = recentsCount + streamings.length;
+    addCard.dataset.pos = recentsCount + apps.length;
     addCard.dataset.action = 'add';
     const addIcon = document.createElement('div');
     addIcon.className = 'card-icon';
@@ -276,15 +276,15 @@ function renderGrid() {
     mainGrid.appendChild(addCard);
 
     // Empty slots
-    for (let i = streamings.length + 1; i < totalSlots; i++) {
+    for (let i = apps.length + 1; i < totalSlots; i++) {
         const emptyCard = document.createElement('div');
         emptyCard.className = 'card card-sm card-empty';
         emptyCard.dataset.pos = recentsCount + i;
         mainGrid.appendChild(emptyCard);
     }
 
-    if (Number.isSafeInteger(focusedStreamingId)) {
-        const matchingCard = document.querySelector(`.card[data-streaming-id="${focusedStreamingId}"]`);
+    if (Number.isSafeInteger(focusedAppId)) {
+        const matchingCard = document.querySelector(`.card[data-app-id="${focusedAppId}"]`);
         if (matchingCard) focusedIndex = Number(matchingCard.dataset.pos);
     }
 
@@ -300,25 +300,25 @@ function renderGrid() {
     updateFocus();
 }
 
-function appendStreamingIcon(container, streaming, imageStyle = '') {
+function appendAppIcon(container, app, imageStyle = '') {
     const fallback = () => {
         const label = document.createElement('span');
         label.className = 'fallback';
-        label.textContent = streaming.name ? streaming.name[0] : '?';
+        label.textContent = app.name ? app.name[0] : '?';
         container.replaceChildren(label);
     };
 
-    if (!streaming.slug) {
+    if (!app.slug) {
         fallback();
         return;
     }
 
     const image = document.createElement('img');
-    image.src = `assets/icons/${encodeURIComponent(streaming.slug)}.svg`;
-    image.alt = streaming.name || streaming.slug;
+    image.src = `assets/icons/${encodeURIComponent(app.slug)}.svg`;
+    image.alt = app.name || app.slug;
     image.style.cssText = imageStyle;
     image.addEventListener('error', () => {
-        image.src = `https://cdn.simpleicons.org/${encodeURIComponent(streaming.slug)}/white`;
+        image.src = `https://cdn.simpleicons.org/${encodeURIComponent(app.slug)}/white`;
         image.addEventListener('error', fallback, { once: true });
     }, { once: true });
     container.appendChild(image);
@@ -482,7 +482,7 @@ function handleGridNav(e) {
         if (idx < 0 || idx >= totalPositions) return false;
         if (idx < recentsCount) return hasRecents;
         const gridIdx = idx - recentsCount;
-        return gridIdx <= streamings.length;
+        return gridIdx <= apps.length;
     }
 
     function findNext(from, dir) {
@@ -607,7 +607,7 @@ function handleSettingsNav(e) {
             clearSettingsFocus();
             const activeSection = popup.querySelector('.settings-section.active');
             if (activeSection) {
-                const contentItems = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
+                const contentItems = activeSection.querySelectorAll('.app-item, .system-btn, button.btn-primary');
                 const firstItem = contentItems[0];
                 if (firstItem) {
                     firstItem.classList.add('fifotv-focused');
@@ -639,7 +639,7 @@ function handleSettingsItemNav(e) {
     const activeSection = popup.querySelector('.settings-section.active');
     if (!activeSection) { navState = 'settings-popup'; return; }
 
-    const items = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
+    const items = activeSection.querySelectorAll('.app-item, .system-btn, button.btn-primary');
     const visibleItems = Array.from(items).filter(el => el.offsetParent !== null);
     if (visibleItems.length === 0) { navState = 'settings-popup'; return; }
 
@@ -689,7 +689,7 @@ function handleSettingsItemNav(e) {
         case 'Enter':
             if (visibleItems[settingsItemIndex]) {
                 const el = visibleItems[settingsItemIndex];
-                if (el.classList.contains('streaming-item')) {
+                if (el.classList.contains('app-item')) {
                     const btn = el.querySelector('.btn-icon');
                     if (btn) btn.click();
                     else el.click();
@@ -708,7 +708,7 @@ function handleSettingsSubItemNav(e) {
     const activeSection = popup.querySelector('.settings-section.active');
     if (!activeSection) { navState = 'settings-popup'; return; }
 
-    const items = activeSection.querySelectorAll('.streaming-item, .system-btn, button.btn-primary');
+    const items = activeSection.querySelectorAll('.app-item, .system-btn, button.btn-primary');
     const visibleItems = Array.from(items).filter(el => el.offsetParent !== null);
     if (visibleItems.length === 0) { navState = 'settings-popup'; return; }
 
@@ -802,24 +802,24 @@ function activateCard(pos) {
         return;
     }
 
-    const id = Number(card.dataset.streamingId);
-    const s = window.FIFOtvCardResolution.resolveStreamingById(streamings, id);
-    if (s && s.url) {
-        trackUsage(s.id);
+    const id = Number(card.dataset.appId);
+    const app = window.FIFOtvCardResolution.resolveAppById(apps, id);
+    if (app && app.url) {
+        trackUsage(app.id);
         renderGrid();
-        showTransition(s);
+        showTransition(app);
     }
 }
 
-function showTransition(streaming) {
-    if (typeof window.fifotv !== 'undefined' && window.fifotv.openStreaming) {
-        Promise.resolve(window.fifotv.openStreaming(streaming.url, streaming.name, streaming.slug))
+function showTransition(app) {
+    if (typeof window.fifotv !== 'undefined' && window.fifotv.openApp) {
+        Promise.resolve(window.fifotv.openApp(app))
             .then((data) => {
-                if (!data?.ok) showToast(data?.error || 'Não foi possível abrir o streaming');
+                if (!data?.ok) showToast(data?.error || 'Não foi possível abrir o app');
             })
-            .catch(() => showToast('Não foi possível abrir o streaming'));
+            .catch(() => showToast('Não foi possível abrir o app'));
     } else {
-        window.location.href = streaming.url;
+        window.location.href = app.url;
     }
 }
 
@@ -830,7 +830,7 @@ function showAddPopup() {
     popup.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
             ${ICON.plus}
-            <h3 style="font-weight:500;font-size:17px;">Adicionar Streaming</h3>
+            <h3 style="font-weight:500;font-size:17px;">Adicionar App</h3>
         </div>
         <div style="display:flex;gap:16px;margin-bottom:20px;">
             <div id="add-preview" style="width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,0.06);border:1px solid var(--pill-border);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
@@ -871,10 +871,10 @@ function showAddPopup() {
         const name = nameInput.value;
         if (url && name) {
             const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-            await window.fifotv.addStreaming({ id: Date.now(), name, slug, url });
+            await window.fifotv.addApp({ id: Date.now(), name, slug, type: 'web', url });
             addPopup.hide(false);
             navState = 'grid';
-            loadStreamings();
+            loadApps();
             showToast(`${name} adicionado`);
         }
     };
@@ -889,10 +889,10 @@ function setAddPreview(preview, slug) {
         preview.appendChild(placeholder);
         return;
     }
-    appendStreamingIcon(preview, { name: slug[0].toUpperCase(), slug }, 'width:48px;height:48px;filter:brightness(0) invert(1);');
+    appendAppIcon(preview, { name: slug[0].toUpperCase(), slug }, 'width:48px;height:48px;filter:brightness(0) invert(1);');
 }
 
-let settingsSection = 'streamings';
+let settingsSection = 'apps';
 
 function showSettingsPopup() {
     const popup = document.getElementById('settings-popup');
@@ -901,7 +901,7 @@ function showSettingsPopup() {
     settingsSectionIndex = 0;
 
     const sections = [
-        { id: 'streamings', icon: ICON.tv, label: 'Streamings' },
+        { id: 'apps', icon: ICON.tv, label: 'Apps' },
         { id: 'wifi', icon: ICON.wifi, label: 'Wi-Fi' },
         { id: 'bluetooth', icon: ICON.bluetooth, label: 'Bluetooth' },
         { id: 'system', icon: ICON.monitor, label: 'Sistema' }
@@ -916,10 +916,10 @@ function showSettingsPopup() {
             `).join('')}
         </div>
         <div class="settings-content">
-            <div class="settings-section ${settingsSection === 'streamings' ? 'active' : ''}" id="section-streamings">
-                <div class="settings-section-title">Streamings</div>
-                <div id="streamings-list"></div>
-                <button class="btn-primary" id="btn-add-streaming" style="margin-top:12px;">+ Adicionar novo</button>
+            <div class="settings-section ${settingsSection === 'apps' ? 'active' : ''}" id="section-apps">
+                <div class="settings-section-title">Apps</div>
+                <div id="apps-list"></div>
+                <button class="btn-primary" id="btn-add-app" style="margin-top:12px;">+ Adicionar novo</button>
             </div>
             <div class="settings-section ${settingsSection === 'wifi' ? 'active' : ''}" id="section-wifi">
                 <div class="settings-section-title">Wi-Fi</div>
@@ -970,7 +970,7 @@ function showSettingsPopup() {
                 const newEl = document.getElementById('section-' + newSection);
                 if (newEl) newEl.classList.add('active');
                 // Re-render content for the new section
-                if (newSection === 'streamings') renderStreamingsList();
+                if (newSection === 'apps') renderAppsList();
                 if (newSection === 'wifi') loadWifiSection();
                 if (newSection === 'bluetooth') loadBluetoothSection();
                 // Fade in
@@ -979,12 +979,12 @@ function showSettingsPopup() {
         };
     });
 
-    document.getElementById('btn-add-streaming').onclick = () => {
+    document.getElementById('btn-add-app').onclick = () => {
         settingsPopup.hide(false);
         showAddPopup();
     };
 
-    renderStreamingsList();
+    renderAppsList();
     if (settingsSection === 'wifi') loadWifiSection();
     if (settingsSection === 'bluetooth') loadBluetoothSection();
 }
@@ -1006,24 +1006,24 @@ async function loadWifiSection() {
             list.replaceChildren();
             scan.networks.forEach((network) => {
                 const item = document.createElement('div');
-                item.className = 'streaming-item';
+                item.className = 'app-item';
                 item.tabIndex = 0;
                 item.style.cursor = 'pointer';
                 item.addEventListener('click', () => connectWifi(network.ssid, network.security));
 
                 const icon = document.createElement('div');
-                icon.className = 'streaming-item-icon';
+                icon.className = 'app-item-icon';
                 const strongSignal = network.signal > 60;
                 icon.style.cssText = `background:${strongSignal ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${strongSignal ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;`;
                 icon.innerHTML = ICON.wifi;
 
                 const details = document.createElement('div');
-                details.className = 'streaming-item-info';
+                details.className = 'app-item-info';
                 const name = document.createElement('div');
-                name.className = 'streaming-item-name';
+                name.className = 'app-item-name';
                 name.textContent = network.ssid;
                 const security = document.createElement('div');
-                security.className = 'streaming-item-url';
+                security.className = 'app-item-url';
                 security.textContent = `${network.security || 'Aberta'} · ${network.signal}%`;
                 details.append(name, security);
                 item.append(icon, details);
@@ -1152,26 +1152,26 @@ async function loadBluetoothSection() {
 
 function createBluetoothItem(device, connected) {
     const item = document.createElement('div');
-    item.className = 'streaming-item';
+    item.className = 'app-item';
     item.tabIndex = 0;
 
     const icon = document.createElement('div');
-    icon.className = 'streaming-item-icon';
+    icon.className = 'app-item-icon';
     icon.style.cssText = `background:${connected ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)'};border:1px solid ${connected ? 'rgba(74,222,128,0.3)' : 'var(--pill-border)'};min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;`;
     icon.innerHTML = ICON.bluetooth;
 
     const details = document.createElement('div');
-    details.className = 'streaming-item-info';
+    details.className = 'app-item-info';
     const name = document.createElement('div');
-    name.className = 'streaming-item-name';
+    name.className = 'app-item-name';
     name.textContent = device.name || device.mac;
     const mac = document.createElement('div');
-    mac.className = 'streaming-item-url';
+    mac.className = 'app-item-url';
     mac.textContent = device.mac;
     details.append(name, mac);
 
     const actions = document.createElement('div');
-    actions.className = 'streaming-item-actions';
+    actions.className = 'app-item-actions';
     if (connected) {
         const unpair = document.createElement('button');
         unpair.className = 'btn-icon';
@@ -1261,52 +1261,52 @@ async function updateBluetoothPill() {
     } catch (e) {}
 }
 
-function renderStreamingsList() {
-    const list = document.getElementById('streamings-list');
+function renderAppsList() {
+    const list = document.getElementById('apps-list');
     if (!list) return;
     list.replaceChildren();
-    streamings.forEach((streaming) => {
-        const item = createStreamingListItem(streaming);
+    apps.forEach((app) => {
+        const item = createAppListItem(app);
         const actions = document.createElement('div');
-        actions.className = 'streaming-item-actions';
+        actions.className = 'app-item-actions';
         actions.append(
-            createStreamingAction('Mover acima', ICON.chevronUp, () => moveStreaming(streaming.id, -1)),
-            createStreamingAction('Mover abaixo', ICON.chevronDown, () => moveStreaming(streaming.id, 1)),
-            createStreamingAction('Remover', ICON.x, () => removeStreaming(streaming.id), true)
+            createAppAction('Mover acima', ICON.chevronUp, () => moveApp(app.id, -1)),
+            createAppAction('Mover abaixo', ICON.chevronDown, () => moveApp(app.id, 1)),
+            createAppAction('Remover', ICON.x, () => removeApp(app.id), true)
         );
         item.appendChild(actions);
         list.appendChild(item);
     });
 }
 
-function createStreamingListItem(streaming) {
+function createAppListItem(app) {
     const item = document.createElement('div');
-    item.className = 'streaming-item';
-    item.dataset.id = streaming.id;
+    item.className = 'app-item';
+    item.dataset.id = app.id;
     item.tabIndex = 0;
 
     const icon = document.createElement('div');
-    icon.className = 'streaming-item-icon';
+    icon.className = 'app-item-icon';
     const image = document.createElement('img');
-    image.src = `assets/icons/${encodeURIComponent(streaming.slug)}.svg`;
-    image.alt = streaming.name;
+    image.src = `assets/icons/${encodeURIComponent(app.slug)}.svg`;
+    image.alt = app.name;
     image.addEventListener('error', () => { image.style.display = 'none'; }, { once: true });
     icon.appendChild(image);
 
     const details = document.createElement('div');
-    details.className = 'streaming-item-info';
+    details.className = 'app-item-info';
     const name = document.createElement('div');
-    name.className = 'streaming-item-name';
-    name.textContent = streaming.name;
+    name.className = 'app-item-name';
+    name.textContent = app.name;
     const url = document.createElement('div');
-    url.className = 'streaming-item-url';
-    url.textContent = streaming.url;
+    url.className = 'app-item-url';
+    url.textContent = app.url;
     details.append(name, url);
     item.append(icon, details);
     return item;
 }
 
-function createStreamingAction(title, icon, action, danger = false) {
+function createAppAction(title, icon, action, danger = false) {
     const button = document.createElement('button');
     button.className = `btn-icon${danger ? ' danger' : ''}`;
     button.title = title;
@@ -1315,35 +1315,35 @@ function createStreamingAction(title, icon, action, danger = false) {
     return button;
 }
 
-async function moveStreaming(id, direction) {
-    const idx = streamings.findIndex(s => s.id === id);
+async function moveApp(id, direction) {
+    const idx = apps.findIndex(s => s.id === id);
     const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= streamings.length) return;
-    [streamings[idx], streamings[newIdx]] = [streamings[newIdx], streamings[idx]];
-    await window.fifotv.reorderStreamings({ streamings });
-    renderStreamingsList();
+    if (newIdx < 0 || newIdx >= apps.length) return;
+    [apps[idx], apps[newIdx]] = [apps[newIdx], apps[idx]];
+    await window.fifotv.reorderApps({ apps });
+    renderAppsList();
     renderGrid();
-    focusStreamingSettingsAction(newIdx, direction > 0 ? 1 : 0);
+    focusAppSettingsAction(newIdx, direction > 0 ? 1 : 0);
     showToast('Ordem alterada');
 }
 
-async function removeStreaming(id) {
-    const removedIndex = streamings.findIndex(s => s.id === id);
-    await window.fifotv.removeStreaming(id);
-    streamings = streamings.filter(s => s.id !== id);
-    renderStreamingsList();
+async function removeApp(id) {
+    const removedIndex = apps.findIndex(s => s.id === id);
+    await window.fifotv.removeApp(id);
+    apps = apps.filter(s => s.id !== id);
+    renderAppsList();
     renderGrid();
-    focusStreamingSettingsAction(removedIndex, 2);
-    showToast('Streaming removido');
+    focusAppSettingsAction(removedIndex, 2);
+    showToast('App removido');
 }
 
-function focusStreamingSettingsAction(itemIndex, actionIndex) {
-    const section = document.getElementById('section-streamings');
-    const items = section ? Array.from(section.querySelectorAll('.streaming-item')) : [];
+function focusAppSettingsAction(itemIndex, actionIndex) {
+    const section = document.getElementById('section-apps');
+    const items = section ? Array.from(section.querySelectorAll('.app-item')) : [];
     clearSettingsFocus();
 
     if (items.length === 0) {
-        const addButton = document.getElementById('btn-add-streaming');
+        const addButton = document.getElementById('btn-add-app');
         if (!addButton) return;
         settingsItemIndex = 0;
         navState = 'settings-item';
@@ -1778,7 +1778,7 @@ applyRandomPalette();
 updateClock();
 setInterval(updateClock, 1000);
 loadUsageCounts();
-loadStreamings();
+loadApps();
 initVolume();
 resetScreensaverTimers();
 updateBluetoothPill();

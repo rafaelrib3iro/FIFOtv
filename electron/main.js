@@ -5,13 +5,11 @@ const { exec, execFile, spawn } = require('child_process');
 const http = require('http');
 const os = require('os');
 const net = require('net');
-const { isCatalog, isMacAddress, isNonEmptyString, isStreaming, isStreamingUrl } = require('./ipc-validation');
-const { readCatalog } = require('./catalog');
+const { isAppCatalog, isApp, isMacAddress, isNonEmptyString } = require('./ipc-validation');
+const { readAppCatalog } = require('./app-catalog');
+const { createAppRuntimeRegistry } = require('./app-runtimes');
 const { clamp, parseNmcliTerse } = require('./system-controls');
 const { isCurrentView } = require('./view-lifecycle');
-const { hostnameFromUrl, matchesHostname, resolveCustomScript } = require('./provider-resolution');
-const { redactStreamingUrl, runInjectionStages } = require('./streaming-injection');
-const { createClientHintsRegistry } = require('./client-hints');
 const { createNetworkErrorRegistry, redactUrl } = require('./runtime-logging');
 const { resolveLogFile, resolveRuntimeProfile, supportsBluez, supportsPowerActions } = require('./runtime-profile');
 
@@ -52,7 +50,8 @@ if (logConfig.enabled) {
 
 let win = null;
 let homeView = null;
-let streamingView = null;
+let appView = null;
+let activeAppSession = null;
 let overlayView = null;
 let loadingView = null;
 let splashView = null;
@@ -63,29 +62,15 @@ let overlayAttached = false;
 let remoteProcess = null;
 let remoteRunning = false;
 let remoteHealthTimer = null;
-let currentStreamingSlug = null;
 let powerSaveBlockerId = null;
-let streamingGeneration = 0;
+let appGeneration = 0;
 let returningHome = false;
-let removeStreamingClientHints = null;
-const DATA_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
-const CUSTOM_DIR = path.join(__dirname, 'views', 'streaming-customizations');
+const APPS_PATH = path.join(__dirname, '..', 'backend', 'apps.json');
+const LEGACY_STREAMINGS_PATH = path.join(__dirname, '..', 'backend', 'streamings.json');
 const SETTINGS_PATH = path.join(__dirname, '..', 'config', 'settings.json');
-const SPA_DOMAINS = new Set(['youtube']);
-const clientHintsRegistry = createClientHintsRegistry();
 const networkErrorRegistry = createNetworkErrorRegistry((details) => {
   log?.warn(`[Network:${details.label}]`, details.method, details.url, '->', details.error);
 });
-const SMART_TV_UA = 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
-const SMART_TV_CLIENT_HINTS = {
-  'Sec-CH-UA-Platform': '"Tizen"',
-  'Sec-CH-UA-Mobile': '?0',
-  'Sec-CH-UA': '"Chromium";v="149", "Not_A Brand";v="24"',
-  'Sec-CH-UA-Full-Version-List': '"Chromium";v="149.0.0.0", "Not_A Brand";v="24.0.0.0"',
-  'Sec-CH-UA-Platform-Version': '"6.5.0"',
-  'Sec-CH-UA-Model': '""',
-  'Sec-CH-UA-Form-Factors': '"TV"',
-};
 
 function loadFreshConfig(relativePath) {
   const fullPath = path.join(__dirname, relativePath);
@@ -95,20 +80,24 @@ function loadFreshConfig(relativePath) {
 
 const getStreamingConfig = () => loadFreshConfig('./views/streaming-customizations/config');
 const getSpatialNavConfig = () => loadFreshConfig('./views/spatial-navigation/config');
+const appRuntimeRegistry = createAppRuntimeRegistry({ WebContentsView, fs, clientHintsRegistry: require('./client-hints').createClientHintsRegistry(), attachRendererLogging, redactUrl, loadStreamingConfig: getStreamingConfig, loadSpatialConfig: getSpatialNavConfig, rootDir: __dirname });
 
 // ─── CHROMIUM SWITCHES (must be before app.whenReady) ────────
-// Spatial navigation disabled — polyfill injected per-streaming via executeJavaScript
+// Process-wide Chromium defaults. Web runtime navigation is injected per app below.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('gtk-version', '3'); // Avoid GTK 4 issues on Debian/GNOME
 
-function readStreamings() {
-  return readCatalog(() => fs.readFileSync(DATA_PATH, 'utf8'));
+function readApps() {
+  return readAppCatalog({
+    readFile: (kind) => fs.readFileSync(kind === 'apps' ? APPS_PATH : LEGACY_STREAMINGS_PATH, 'utf8'),
+    writeFile: (text) => fs.writeFileSync(APPS_PATH, text),
+  });
 }
 
-function writeStreamings(data) {
-  assertPayload(isCatalog(data), 'catalog');
-  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
+function writeApps(data) {
+  assertPayload(isAppCatalog(data), 'catalog');
+  fs.writeFileSync(APPS_PATH, JSON.stringify(data, null, 2));
 }
 
 function run(cmd) {
@@ -193,31 +182,31 @@ function assertPayload(condition, message) {
   if (!condition) throw new TypeError(`Invalid IPC payload: ${message}`);
 }
 
-// ─── STREAMINGS ────────────────────────────────────────────
-handleFrom('streamings:get', () => [homeView], () => {
-  return readStreamings();
+// ─── APPS ──────────────────────────────────────────────────
+handleFrom('apps:get', () => [homeView], () => {
+  return readApps();
 });
 
-handleFrom('streamings:add', () => [homeView], (_, data) => {
-  assertPayload(isStreaming(data), 'streaming');
-  const db = readStreamings();
-  assertPayload(!db.streamings.some((streaming) => streaming.id === data.id), 'duplicate streaming id');
-  db.streamings.push(data);
-  writeStreamings(db);
+handleFrom('apps:add', () => [homeView], (_, data) => {
+  assertPayload(isApp(data), 'app');
+  const db = readApps();
+  assertPayload(!db.apps.some((app) => app.id === data.id), 'duplicate app id');
+  db.apps.push(data);
+  writeApps(db);
   return { ok: true };
 });
 
-handleFrom('streamings:remove', () => [homeView], (_, id) => {
-  assertPayload(Number.isSafeInteger(id), 'streaming id');
-  const db = readStreamings();
-  db.streamings = db.streamings.filter(s => s.id !== id);
-  writeStreamings(db);
+handleFrom('apps:remove', () => [homeView], (_, id) => {
+  assertPayload(Number.isSafeInteger(id), 'app id');
+  const db = readApps();
+  db.apps = db.apps.filter((app) => app.id !== id);
+  writeApps(db);
   return { ok: true };
 });
 
-handleFrom('streamings:reorder', () => [homeView], (_, data) => {
-  assertPayload(isCatalog(data), 'catalog');
-  writeStreamings(data);
+handleFrom('apps:reorder', () => [homeView], (_, data) => {
+  assertPayload(isAppCatalog(data), 'catalog');
+  writeApps(data);
   return { ok: true };
 });
 
@@ -780,25 +769,22 @@ function resetHomeScreensaver() {
   }
 }
 
-function destroyStreamingViews() {
+function destroyAppViews() {
   if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
-  streamingGeneration += 1;
+  appGeneration += 1;
   overlayMenuVisible = false;
-
-  if (removeStreamingClientHints) {
-    removeStreamingClientHints();
-    removeStreamingClientHints = null;
-  }
 
   if (overlayView) {
     hideOverlay();
     overlayView.webContents.destroy();
     overlayView = null;
   }
-  if (streamingView) {
-    removeView(streamingView);
-    streamingView.webContents.destroy();
-    streamingView = null;
+  if (appView) {
+    activeAppSession?.dispose();
+    activeAppSession = null;
+    removeView(appView);
+    appView.webContents.destroy();
+    appView = null;
   }
   if (loadingView) {
     removeView(loadingView);
@@ -807,14 +793,13 @@ function destroyStreamingViews() {
   }
 }
 
-function isCurrentStreamingView(view, generation) {
-  return isCurrentView(view, generation, streamingView, streamingGeneration);
+function isCurrentAppView(view, generation) {
+  return isCurrentView(view, generation, appView, appGeneration);
 }
 
 function returnHome() {
   if (returningHome) return;
   returningHome = true;
-  currentStreamingSlug = null;
 
   if (powerSaveBlockerId !== null) {
     powerSaveBlocker.stop(powerSaveBlockerId);
@@ -827,7 +812,7 @@ function returnHome() {
   }
 
   setImmediate(() => {
-    destroyStreamingViews();
+    destroyAppViews();
     returningHome = false;
     if (homeView && !homeView.webContents.isDestroyed()) {
       homeView.webContents.focus();
@@ -836,120 +821,25 @@ function returnHome() {
   });
 }
 
-handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
-  assertPayload(isStreamingUrl(url), 'streaming URL');
-  assertPayload(isNonEmptyString(name), 'streaming name');
-  assertPayload(typeof slug === 'string' && /^[a-z0-9][a-z0-9-]*$/i.test(slug), 'streaming slug');
-  if (streamingView) return { ok: false, error: 'streaming already open' };
-  currentStreamingSlug = slug;
-  overlayMenuVisible = false;
-
-  // Prevent display sleep while streaming is active
-  if (powerSaveBlockerId === null) {
-    powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
-  }
-
+handleFrom('nav:open-app', () => [homeView], (_, appDefinition) => {
+  assertPayload(isApp(appDefinition), 'app');
+  if (activeAppSession) return { ok: false, error: 'app already open' };
+  const runtime = appRuntimeRegistry.resolve(appDefinition);
   const { width, height } = getViewBounds();
-
-  if (url && !url.match(/^https?:\/\//i)) {
-    url = 'https://' + url;
-  }
-
-  const initialHostname = hostnameFromUrl(url);
-  if (matchesHostname(initialHostname, 'youtube.com') || matchesHostname(initialHostname, 'youtu.be')) {
-    url = 'https://www.youtube.com/tv';
-  }
-
-  const isPrimeVideo = matchesHostname(hostnameFromUrl(url), 'primevideo.com');
-
-  // Create streaming view — loads in background behind loading
-  const streamView = new WebContentsView({
-    webPreferences: {
-      preload: path.join(__dirname, 'preload-streaming.js'),
-      contextIsolation: false,
-      nodeIntegration: false,
-      additionalArguments: [slug],
-    }
-  });
-  streamingView = streamView;
-  const streamGeneration = ++streamingGeneration;
-  streamView.setBackgroundColor('#0a0816');
-  streamView.setBounds({ x: 0, y: 0, width, height });
-  streamView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  attachRendererLogging(streamView.webContents, `streaming:${slug}`);
-
-  // TV Identity — User-Agent + Client Hints headers (skip for Prime Video and Netflix)
-  const skipTvIdentity = isPrimeVideo || slug === 'netflix';
-  if (!skipTvIdentity) {
-    streamView.webContents.setUserAgent(SMART_TV_UA);
-    removeStreamingClientHints = clientHintsRegistry.register(
-      streamView.webContents.session,
-      streamView.webContents.id,
-      SMART_TV_CLIENT_HINTS
-    );
-  }
-
-  let loadFailureHandled = false;
-  const recoverStreaming = (reason) => {
-    if (loadFailureHandled || !isCurrentStreamingView(streamView, streamGeneration)) return;
-    loadFailureHandled = true;
-    console.error(`[streaming] returning home after ${reason}`);
-    returnHome();
+  const generation = ++appGeneration;
+  const host = {
+    resetActivity: resetHomeScreensaver,
+    overlayMenuVisible: () => overlayMenuVisible,
+    forwardOverlay: forwardToOverlay,
+    openContextMenu: () => { const bounds = getViewBounds(); showOverlay(); overlayView.webContents.send('show-menu', { x: bounds.width / 2, y: bounds.height / 2 }); },
   };
-  streamView.webContents.on('did-fail-load', (_, code, desc, failedUrl, isMainFrame) => {
-    console.error(`[streaming] failed to load: ${code} ${desc}`);
-    if (code !== -3 && isMainFrame) recoverStreaming(`main-frame load failure: ${redactUrl(failedUrl)}`);
-  });
-  streamView.webContents.on('render-process-gone', (_, details) => recoverStreaming(`renderer exit: ${details.reason}`));
-  streamView.webContents.loadURL(url);
-
-  streamView.webContents.on('dom-ready', () => {
-    if (!isCurrentStreamingView(streamView, streamGeneration)) return;
-    const currentUrl = streamView.webContents.getURL();
-    const redactedUrl = redactStreamingUrl(currentUrl);
-    const SN_CONFIG = getSpatialNavConfig();
-    const streamConfig = SN_CONFIG[slug] || {};
-    const scriptSelection = resolveCustomScript(getStreamingConfig(), currentUrl);
-    const stages = [];
-    const addStage = (name, filePath) => {
-      try {
-        stages.push({ name, code: fs.readFileSync(filePath, 'utf8') });
-        return true;
-      } catch (error) {
-        console.error(`[streaming] injection failed provider=${slug} stage=${name} url=${redactedUrl}: ${error.message}`);
-        return false;
-      }
-    };
-
-    if (streamConfig.enabled !== false && !addStage('polyfill', path.join(__dirname, 'views', 'spatial-navigation', 'polyfill.js'))) return;
-    if (!addStage('shared', path.join(CUSTOM_DIR, 'shared.js'))) return;
-    stages.push({ name: 'slug', code: `window.__FIFOtv_slug = ${JSON.stringify(slug)};` });
-    if (!addStage('spatial config', path.join(CUSTOM_DIR, 'spatial-nav.js'))) return;
-    if (scriptSelection?.scriptFile && !addStage('provider script', path.join(CUSTOM_DIR, scriptSelection.scriptFile))) return;
-
-    console.log(
-      `[streaming] injection plan provider=${slug} hostname=${hostnameFromUrl(currentUrl) || '[invalid]'} script=${scriptSelection?.scriptFile || 'none'} url=${redactedUrl}`
-    );
-    runInjectionStages({
-      webContents: streamView.webContents,
-      stages,
-      isCurrent: () => isCurrentStreamingView(streamView, streamGeneration),
-      onStageError: (stage, error) => {
-        console.error(`[streaming] injection failed provider=${slug} stage=${stage} url=${redactedUrl}: ${error.message}`);
-      },
-    }).then((result) => {
-      if (result.ok) console.log(`[streaming] injection complete provider=${slug} url=${redactedUrl}`);
-    }).catch((error) => {
-      console.error(`[streaming] injection failed provider=${slug} stage=pipeline url=${redactedUrl}: ${error.message}`);
-    });
-
-    // Re-focus streaming view after page loads (Netflix may steal focus)
-    setTimeout(() => {
-      if (isCurrentStreamingView(streamView, streamGeneration)) {
-        streamView.webContents.focus();
-      }
-    }, 3000);
-  });
+  let session;
+  session = runtime.open({ app: appDefinition, bounds: { x: 0, y: 0, width, height }, isCurrent: () => activeAppSession === session && appGeneration === generation, onFatal: returnHome });
+  activeAppSession = session;
+  appView = session.view;
+  overlayMenuVisible = false;
+  if (powerSaveBlockerId === null) powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+  appView.webContents.on('before-input-event', (event, input) => session.handleInput(event, input, host));
 
   // Create loading view — shows icon + name + spinner
   loadingView = new WebContentsView({
@@ -960,11 +850,11 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   });
   loadingView.setBackgroundColor('#0a0816');
   loadingView.setBounds({ x: 0, y: 0, width, height });
-  const iconPath = slug ? `file://${path.join(__dirname, '..', 'frontend', 'assets', 'icons', `${slug}.svg`)}` : '';
+  const iconPath = appDefinition.slug ? `file://${path.join(__dirname, '..', 'frontend', 'assets', 'icons', `${appDefinition.slug}.svg`)}` : '';
   attachRendererLogging(loadingView.webContents, 'loading');
   loadingView.webContents.loadFile(
     path.join(__dirname, 'views', 'loading.html'),
-    { query: { name: name || '', icon: iconPath } }
+    { query: { name: appDefinition.name || '', icon: iconPath } }
   );
 
   // Create overlay view
@@ -986,17 +876,17 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
   // D-pad navigation in the overlay's context menu. Removed — the overlay's
   // handleKey function already handles arrows when menu is open.
 
-  // Z-order: homeView (bottom), streamingView (top, receives mouse)
+  // Z-order: homeView (bottom), appView (top, receives mouse)
   // overlay is NOT added here — it's added/removed dynamically via IPC handlers
-  addView(streamView);
+  addView(appView);
   addView(loadingView);
 
-  // After 5s: remove loading, keep streaming + overlay
-  const streamLoadingView = loadingView;
+  // After 5s: remove loading, keep app + overlay
+  const appLoadingView = loadingView;
   loadingTimer = setTimeout(() => {
-    if (isCurrentStreamingView(streamView, streamGeneration) && loadingView === streamLoadingView) {
-      removeView(streamLoadingView);
-      if (!streamLoadingView.webContents.isDestroyed()) streamLoadingView.webContents.destroy();
+    if (isCurrentAppView(appView, generation) && loadingView === appLoadingView) {
+      removeView(appLoadingView);
+      if (!appLoadingView.webContents.isDestroyed()) appLoadingView.webContents.destroy();
       loadingView = null;
     }
     loadingTimer = null;
@@ -1008,75 +898,19 @@ handleFrom('nav:open-streaming', () => [homeView], (_, url, name, slug) => {
     appCommandAttached = true;
   }
 
-  // Intercept only ContextMenu + BrowserHome — everything else passes to streaming
-  streamView.webContents.on('before-input-event', handleBeforeInput);
-
-  // Focus streaming page so it receives keyboard and mouse
-  streamView.webContents.focus();
+  // Focus app page so it receives keyboard and mouse
+  activeAppSession?.focus();
 
   return { ok: true };
 });
 
 function handleAppCommand(_, cmd) {
   resetHomeScreensaver();
-  if (cmd === 'browser-backward') {
-    if (overlayMenuVisible) {
-      forwardToOverlay({ key: 'BrowserBack', type: 'keyDown' });
-    } else if (streamingView && !streamingView.webContents.isDestroyed()) {
-      const isSpa = currentStreamingSlug && SPA_DOMAINS.has(currentStreamingSlug);
-      if (isSpa) {
-        streamingView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-        streamingView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
-      } else {
-        if (streamingView.webContents.navigationHistory.canGoBack()) {
-          streamingView.webContents.navigationHistory.goBack();
-        }
-      }
-    }
-  } else if (cmd === 'browser-forward') {
-    forwardToOverlay({ key: 'BrowserForward', type: 'keyDown' });
-  }
+  activeAppSession?.handleAppCommand(cmd, { overlayMenuVisible: () => overlayMenuVisible, forwardOverlay: forwardToOverlay });
 }
 
-function handleBeforeInput(event, input) {
-  if (input.type === 'keyDown') resetHomeScreensaver();
-  if (!isOverlayAlive()) return;
-  if (input.type !== 'keyDown') return;
-
-  if (input.key === 'ContextMenu') {
-    event.preventDefault();
-    const { width: w, height: h } = getViewBounds();
-    showOverlay();
-    overlayView.webContents.send('show-menu', { x: w / 2, y: h / 2 });
-    return;
-  }
-  if (input.key === 'BrowserHome') {
-    event.preventDefault();
-    forwardToOverlay(input);
-    return;
-  }
-
-  // Auto-focus first focusable element on first arrow key press
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(input.key) && !overlayMenuVisible) {
-    streamingView.webContents.executeJavaScript(`
-      if (document.activeElement === document.body || document.activeElement === document.documentElement) {
-        const first = document.querySelector('button, a, [tabindex], input, [role="button"]');
-        if (first) { first.focus(); }
-      }
-    `).catch(() => {});
-  }
-
-  // When menu is open, overlay is behind streaming — forward arrow/Enter keys via IPC
-  if (overlayMenuVisible && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(input.key)) {
-    event.preventDefault();
-    forwardToOverlay({ key: input.key, type: 'keyDown' });
-  }
-}
-
-handleFrom('nav:reload-streaming', () => [overlayView], () => {
-  if (streamingView && !streamingView.webContents.isDestroyed()) {
-    streamingView.webContents.reload();
-  }
+handleFrom('nav:reload-app', () => [overlayView], () => {
+  activeAppSession?.reload();
   return { ok: true };
 });
 
@@ -1087,21 +921,17 @@ handleFrom('nav:go-home', () => [homeView, overlayView], () => {
 
 handleFrom('overlay:zoom', () => [overlayView], (_, delta) => {
   assertPayload(typeof delta === 'number' && Number.isFinite(delta), 'zoom delta');
-  if (streamingView && !streamingView.webContents.isDestroyed()) {
-    const current = Math.round(streamingView.webContents.getZoomFactor() * 100);
-    const zoom = clamp(current + delta, 50, 150);
-    streamingView.webContents.setZoomFactor(zoom / 100);
-    return { ok: true, zoom };
-  }
-  return { ok: false, error: 'Streaming indisponível' };
+  const zoom = activeAppSession?.zoom(delta, clamp);
+  if (zoom !== null && zoom !== undefined) return { ok: true, zoom }
+  return { ok: false, error: 'App indisponível' };
 });
 
 handleFrom('overlay:focus', () => [overlayView], (_, target) => {
-  assertPayload(target === 'overlay' || target === 'streaming', 'focus target');
+  assertPayload(target === 'overlay' || target === 'app', 'focus target');
   if (target === 'overlay' && isOverlayAlive()) {
     overlayView.webContents.focus();
-  } else if (target === 'streaming' && streamingView && !streamingView.webContents.isDestroyed()) {
-    streamingView.webContents.focus();
+  } else if (target === 'app' && appView && !appView.webContents.isDestroyed()) {
+    activeAppSession?.focus();
   }
   return { ok: true };
 });
@@ -1119,12 +949,12 @@ onFrom('overlay:show-menu', () => [overlayView], () => {
   overlayView.webContents.focus();
 });
 
-// Overlay: remove from hierarchy (streaming regains full control)
+// Overlay: remove from hierarchy (app regains full control)
 onFrom('overlay:hide-menu', () => [overlayView], () => {
   if (!isOverlayAlive()) return;
   hideOverlay();
-  if (streamingView && !streamingView.webContents.isDestroyed()) {
-    streamingView.webContents.focus();
+  if (appView && !appView.webContents.isDestroyed()) {
+    activeAppSession?.focus();
   }
 });
 
@@ -1137,8 +967,8 @@ onFrom('overlay:toast-show', () => [overlayView], () => {
 onFrom('overlay:toast-hide', () => [overlayView], () => {
   if (!isOverlayAlive()) return;
   hideOverlay();
-  if (streamingView && !streamingView.webContents.isDestroyed()) {
-    streamingView.webContents.focus();
+  if (appView && !appView.webContents.isDestroyed()) {
+    activeAppSession?.focus();
   }
 });
 
@@ -1409,7 +1239,7 @@ app.whenReady().then(async () => {
     const { width: w, height: h } = getViewBounds();
     if (splashView && !splashView.webContents.isDestroyed()) splashView.setBounds({ x: 0, y: 0, width: w, height: h });
     if (homeView && !homeView.webContents.isDestroyed()) homeView.setBounds({ x: 0, y: 0, width: w, height: h });
-    if (streamingView && !streamingView.webContents.isDestroyed()) streamingView.setBounds({ x: 0, y: 0, width: w, height: h });
+    activeAppSession?.setBounds({ x: 0, y: 0, width: w, height: h });
     if (loadingView && !loadingView.webContents.isDestroyed()) loadingView.setBounds({ x: 0, y: 0, width: w, height: h });
     if (isOverlayAlive()) overlayView.setBounds({ x: 0, y: 0, width: w, height: h });
   });

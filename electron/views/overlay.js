@@ -49,7 +49,7 @@
       volToastEl.classList.remove('fifotv-fade-out');
     }
 
-    // Bring overlay to front so toast is visible over streaming
+    // Bring overlay to front so toast is visible over app
     if (window.fifotv && window.fifotv.showToastOverlay) {
       window.fifotv.showToastOverlay();
     }
@@ -152,7 +152,7 @@
     el.classList.add('fifotv-hidden');
     clearInterval(monitorInterval);
     monitorInterval = null;
-    if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
+    if (window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('app');
     if (window.fifotv && window.fifotv.sendOverlayToBack) window.fifotv.sendOverlayToBack();
   }
 
@@ -266,7 +266,7 @@
     menuFocusIndex = -1;
 
     if (window.fifotv && window.fifotv.setMenuVisibility) window.fifotv.setMenuVisibility(false);
-    if (!keepOverlay && window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('streaming');
+    if (!keepOverlay && window.fifotv && window.fifotv.setFocus) window.fifotv.setFocus('app');
     // Send overlay back only if no visible overlay surface needs it.
     if (!keepOverlay && !toastVisible && window.fifotv && window.fifotv.sendOverlayToBack) {
       window.fifotv.sendOverlayToBack();
@@ -287,7 +287,7 @@
         window.fifotv.goHome();
         break;
       case 'reload':
-        window.fifotv.reloadStreaming();
+        window.fifotv.reloadApp();
         hideMenu();
         break;
       case 'zoom-bar':
@@ -463,7 +463,7 @@
       case 'F1':
         break;
       case 'F5':
-        window.fifotv.reloadStreaming();
+        window.fifotv.reloadApp();
         break;
       case 'F8':
         break;
